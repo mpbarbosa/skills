@@ -130,6 +130,12 @@ From it, establish and write down:
 Anything you cannot establish here becomes an honest gap in Step 6, not an
 invention.
 
+**Absence is a finding, not a blank.** No `CONTEXT.md`, no test directory, no
+server, no ADRs — each of those is a direct input to Step 4, where it decides a
+skip. Write down what is *not* there as deliberately as what is, and stop looking
+for it afterwards; a later step that hunts for a file you already established does
+not exist is how invented paths get into an adapted guide.
+
 ---
 
 ## Step 4 — Assess each unimported guide
@@ -167,6 +173,12 @@ since the last run. Generic triggers worth checking:
 
 Build the equivalent table for this project once, from the library's actual
 contents, and keep it in the index — it is what makes the *next* run cheap.
+
+**Name the persistent skips separately.** Some guides will never apply — a REST
+guide for a library with no network surface, a mobile guide for a CLI. Listing
+them as *persistent* in the index, distinct from conditional skips, tells the next
+run to **re-confirm rather than re-litigate**. Conditional skips are the ones to
+look at again; persistent ones need a sentence, not an assessment.
 
 **Bias toward fewer.** Ten adapted guides that get read beat thirty that get
 skimmed, and every import is a file someone must keep true as the code moves.
@@ -217,6 +229,14 @@ If a row has no location — the project has no such layer — say that in the r
 An honest blank is information; a plausible-looking path is a trap for whoever
 follows it.
 
+**Adapt from the library template, never from another project's adapted copy.**
+An adapted guide is saturated with *that* project's nouns, and starting from one
+carries them across silently — you end up with a guide citing a framework or a
+file the current project has never had. If you do start from a sibling's copy,
+grep the result for that project's distinctive terms before finishing, because
+the placeholder check below will not catch them: they are specific, plausible,
+and look exactly like successful adaptation.
+
 **Replace generic commands with the ones that actually run.**
 
 > Generic: "run your test suite against a real database"
@@ -245,11 +265,19 @@ back into the library.
 | Guide type | Depth |
 |---|---|
 | Architecture (clean, coupling, cohesion) | High — map every layer to real paths |
-| Testing | High — real commands, real fixtures, real seams |
+| Testing | High — real commands, real fixtures, real seams (see below) |
 | API design | High — map to actual routes and their error shape |
 | Language or framework practice | Medium — scope to the directories that use it |
 | Cross-cutting principles (DRY, naming, errors) | Medium — repo examples, general rules kept |
 | Process and agent-assisted development | Low–medium — project file and budget notes |
+
+**Where a tier does not exist, describe the seams — do not invent the command.**
+A testing guide adapted for a project with no test suite is the sharpest version
+of this: say plainly that no suite exists, name the real verification gate that
+does (a type-check, a lint, a build), and describe what *would* be tested and
+where the seams are. That is a usable guide. `npm test` written into a project
+that has no such script is a guide that fails the first time anyone follows it,
+and it fails in a way that discredits the rest of the file.
 
 ---
 
