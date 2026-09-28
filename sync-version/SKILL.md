@@ -96,7 +96,7 @@ above a table of past releases is the common case — the header is a claim, eve
 row below it is history. Scope the edit to the line, not the file:
 
 ```sh
-perl -i -pe 's/(?<![0-9.])\Q'"$OLD"'\E(?![0-9.])/'"$NEW"'/g
+perl -i -pe 's/(?<![0-9.])\Q'"$OLD"'\E(?!\d)(?!\.\d)/'"$NEW"'/g
              if /^> \*\*Current version:\*\*/' ROADMAP.md
 ```
 
@@ -125,17 +125,22 @@ nothing stopping the match from ending mid-number.
 there is no boundary between them, and `v`-prefixed versions are everywhere in
 tags, badges and CDN paths.
 
-What works is a boundary defined by the character class that actually matters —
-digits and dots:
+What works is a trailing guard that blocks only a *longer version* — a digit, or
+a dot followed by a digit — while still allowing a version that is immediately
+followed by a file extension. A flat `(?![0-9.])` looks right and is not: it
+refuses to match `v1.2.3` in `archive/refs/tags/v1.2.3.tar.gz`, because the next
+character is a dot. Tarball and CDN URLs are exactly where versions get
+replaced, so that omission is silent and common:
 
 ```sh
-perl -i -pe 's/(?<![0-9.])\Q'"$OLD"'\E(?![0-9.])/'"$NEW"'/g' <file>
+perl -i -pe 's/(?<![0-9.])\Q'"$OLD"'\E(?!\d)(?!\.\d)/'"$NEW"'/g' <file>
 ```
 
 `\Q…\E` escapes the version literally, so the dots cannot match anything else.
-Verified against all eight cases:
+Verified against all nine cases:
 
     0.4.2  0.4.2-alpha  v0.4.2,  lib@0.4.2/x     -> replaced
+    archive/refs/tags/v0.4.2.tar.gz              -> replaced
     0.4.20  0.4.21  10.4.2  v0.4.20              -> untouched
 
 Structured files deserve a structured edit rather than a text one. A runtime
