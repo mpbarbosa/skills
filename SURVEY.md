@@ -26,15 +26,25 @@ find . -maxdepth 6 -name SKILL.md \
 | Repositories holding them | 29 |
 | Names with more than one copy | 27 |
 | …of those, copies that have **diverged** | 22 |
-| **Names assessed so far** | **34** |
-| **Names not yet assessed** | **52** |
+| …of those, a **vendored third-party collection** (see below) | 29 |
+| **Names assessed so far** | **66** |
+| **Names not yet assessed — and yours** | **20** |
 
 Four container conventions are in use: `.claude/skills/`, `.github/skills/`,
 `.agents/skills/`, `.opencode/skills/`.
 
-**The survey is incomplete.** It covered the 22 diverged names plus the 16 in
-`agora_na_copa_2026`. The remaining 52 names have not been read at all — their
-absence below is ignorance, not a decision.
+**The survey is incomplete, but less so than it first appeared.** It covered the
+22 diverged names, the 16 in `agora_na_copa_2026`, and a later pass over what
+remained. **20 first-party names have still not been read** — their absence from
+the skip lists below is ignorance, not a decision.
+
+Two corrections to an earlier count of 52 unread names, both of which inflated
+it. Four (`session-pending`, `session-teardown`, `session-dropped`,
+`verify-workflow-shell`) were **already imported here** — they appear in one
+repository each, so they were neither diverged nor in `agora_na_copa_2026`, and
+fell through a subtraction that never removed what this repo already holds. And
+29 are not first-party at all (below). Derive "unassessed" by subtracting *both*
+the imported set and the vendored set, or the same inflation returns.
 
 ---
 
@@ -97,12 +107,31 @@ carry one transferable idea — verify a pasted URL against the live source
 before filing it, never trusting the search label — which is noted here rather
 than imported, since the routing tables around it are the bulk of the skill.
 
-### Not your work (1)
+### Not your work — a vendored third-party collection (29)
 
-`grill-with-docs` — a fork of the skill in `third_party/skills/engineering/`,
-already installed and available directly. Six diverged copies across your repos
-are drift of someone else's skill. Candidate for deletion there, not import
-here.
+`mpbarbosa.com`'s skills directory is a checkout of the collection vendored at
+`third_party/skills/` (Matt Pocock's, judging by `setup-matt-pocock-skills`).
+All 28 of its names were checked against that directory and **all 28 are
+present**, with no originals mixed in:
+
+`caveman` · `design-an-interface` · `diagnose` · `edit-article` ·
+`git-guardrails-claude-code` · `grill-me` · `handoff` ·
+`improve-codebase-architecture` · `migrate-to-shoehorn` · `obsidian-vault` ·
+`prototype` · `qa` · `request-refactor-plan` · `review` · `scaffold-exercises` ·
+`setup-matt-pocock-skills` · `setup-pre-commit` · `tdd` · `teach` · `to-issues` ·
+`to-prd` · `triage` · `ubiquitous-language` · `write-a-skill` · `writing-beats` ·
+`writing-fragments` · `writing-shape` · `zoom-out`
+
+Plus `grill-with-docs`, which is the same story — a fork of
+`third_party/skills/engineering/grill-with-docs`, already installed and
+available directly, with six diverged copies scattered across your repos.
+
+Nothing here is a candidate. Several are already installed; the rest are
+upstream's to maintain. Re-check the overlap with:
+
+```sh
+find third_party/skills -name SKILL.md | sed 's:.*/\([^/]*\)/SKILL.md:\1:' | sort -u
+```
 
 ---
 
@@ -125,22 +154,43 @@ Worth revisiting if the stated condition changes.
 
 ## Not yet assessed
 
-52 of the 86 names. They were excluded from the survey because they appear in
-only one repository, so they raised no divergence question — **not** because
-they were judged unsuitable. The largest unread pools are in `mpbarbosa.com`
-(29 skills), `olinda_copilot_sdk.ts` (22), `guia_js` (14) and `ibira.js` (8).
+**20 first-party names**, triaged by description but not read in full:
 
-To list them:
+| Bucket | Names |
+|---|---|
+| Project-bound | `campanha-video`, `find-highlights`, `place-instagram-post`, `rodada-update` (portal_brasileirao) · `triagem-n8n` (linkedin) · `analytics` (tokentop) · `ship` (articles) |
+| `ai_workflow.js` tooling | `ai-workflow-scaffold`, `fix-preflight-log-issues`, `next-roadmap-step` |
+| Dependency-bump pattern | `update-ibira`, `update-olinda-sdk`, `update-olinda-utils`, `update-paraty-geocore` |
+| Overlaps what is imported | `docker-test-fix` (→ `triage-test-failures`) · `check-prod-parity` (→ `verify-deploy-landed`, see below) |
+| Thin | `update-submodules` |
+| **Worth reading in full** | `validate-node-modules`, `copy-ts-to-project`, `place-external-link` |
 
-```sh
-cd ~/Documents/GitHub
-find . -maxdepth 6 -name SKILL.md \
-  | grep -vE '/node_modules/|/third_party/|/archived_docs/|\.worktrees/|/\.git/' \
-  | grep -vE '^\./skills/' \
-  | sed 's:.*/\([^/]*\)/SKILL.md:\1:' | sort -u
-```
+### The dependency-bump pattern has nine instances
 
----
+`update-bessa` · `update-guia` · `update-ibira` · `update-olinda-copilot-sdk` ·
+`update-olinda-sdk` · `update-olinda-utils` · `update-pajussara` ·
+`update-pajussara-tui-comp` · `update-paraty-geocore`
+
+All nine bump a sibling library distributed outside the package registry — a
+jsDelivr CDN URL or a GitHub tarball — hand-maintained separately in each repo.
+Nine copies of one procedure is the strongest standing case in this survey for
+writing a single general skill.
+
+### `check-prod-parity` was read, not imported
+
+Its marker list is specific to one site, but it documented three measurement
+traps that were holes in `verify-deploy-landed`, and those have been folded in
+there: ask a fetch for exact substring presence rather than an interpretation; a
+converting fetch path drops HTML attributes so an absent marker may be a fetcher
+artifact; and establish that a probe is observable at all before treating its
+absence as evidence.
+
+### `validate-node-modules` — open question
+
+Solid and well-structured, but its value is its npm command sequences. It would
+have to be imported as an ecosystem-specific skill; generalizing it across
+package managers would gut it. **Undecided** — this collection is otherwise
+ecosystem-agnostic.
 
 ## What makes a skill worth importing
 

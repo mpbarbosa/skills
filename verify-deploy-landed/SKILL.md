@@ -105,6 +105,33 @@ behind a flag, a route that renders it only under conditions you are not meeting
 Choose a case you know renders it, or you will chase a rollout that already
 happened.
 
+**Establish that the probe is observable before you rely on it.** Some things a
+release changes are simply not visible from outside: a version that lives in a
+manifest and is never embedded in served output cannot be read off a page, no
+matter how the deploy went. Confirm the probe appears in the *current* response
+before the rollout — the before/after capture above does this for content, and
+it does it for the version too. A probe that was never observable produces the
+same "absent" as a deploy that never landed, and they are not the same finding.
+
+**Ask for exact substring presence, not for an interpretation.** If a tool or an
+agent is doing the fetching, the question is "does this byte sequence appear,
+yes or no", never "is the new version live". The second invites a judgment, and
+a judgment about a deploy is the thing you came here to replace.
+
+**A fetch path that transforms the payload can hide a present marker.** Anything
+that converts HTML before you search it — a markdown-converting fetch tool, a
+reader mode, a scraper — drops attributes: form `action`, `data-*`, and similar.
+The marker is in the response and absent from what you searched, so the probe
+reports a failed deploy that succeeded. Three consequences:
+
+- **Prefer assets served as plain text** — CSS, JS, JSON, a text endpoint. They
+  survive the round trip intact, so a probe against them means what it says.
+- **Use a raw fetch** (`curl`) rather than a converting one when you can.
+- **An absent marker whose visible side-effect is present is ambiguous, and the
+  ambiguity is the finding.** If the `data-fs-success` attribute is missing but
+  the success message it drives renders, you have learned about your fetcher,
+  not about the deploy. Say so rather than picking a side.
+
 **Defeat the cache deliberately.** Verify against the origin where you can, and
 otherwise bypass the edge rather than hoping:
 
@@ -180,6 +207,9 @@ without those is the claim this skill exists to stop being made.
   redeploy at the same version is legitimate for a config change and is not a
   substitute for the bump you forgot — using it that way leaves the version
   wrong everywhere it is reported.
+- **An absent probe is not automatically a failed deploy.** It is equally a probe
+  that was never observable, or a fetch path that dropped it. Rule those out
+  before reporting a deploy as not landed.
 - **If you cannot verify from outside, say so plainly** and name what would prove
   it — then go and read that. An unverified deploy reported as done is worse than
   one reported as unverified, because only the second one gets checked.
