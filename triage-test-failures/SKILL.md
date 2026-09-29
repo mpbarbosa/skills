@@ -54,6 +54,53 @@ which is the slow part. And **`HEAD` is the baseline, so anything you already
 committed this session is inside it** — if the change under suspicion is
 committed, use the commit you started from, not `HEAD`.
 
+### Name what you are comparing against
+
+That caveat is one instance of a rule worth stating on its own, because it
+governs every command in this skill that means "the change":
+
+> **A command that reads "the change" must name its refs**, or it answers about
+> wherever you happen to be standing.
+
+`git diff` with no refs compares the working tree to `HEAD`, which is a
+different question from *what does this branch change*. Measured, on one change
+viewed three ways:
+
+    state              git diff --stat     git diff origin/main...HEAD
+    uncommitted        sees the change     empty
+    after committing   EMPTY               sees the change
+    another worktree   EMPTY               sees the change
+
+They are complementary, not ranked — and that is the trap. The bare form is
+correct **only while the change is unstaged**, which is exactly the state you
+are in when you first write the command, so it looks right and gets committed
+that way. Every later run — after committing, from the shared root, by someone
+re-checking your claim — answers *nothing changed*. It fails toward "you owe
+nothing", which is the silent direction.
+
+So pick the form that matches the question, and say which:
+
+```sh
+git diff origin/main...HEAD -- <path>   # what this branch changed (any state)
+git diff -- <path>                      # what is uncommitted right now
+git show origin/main:<path>             # the committed content, not the tree
+git ls-tree origin/main <dir>           # a listing, at a named ref
+```
+
+One more, from the same family: a plain `grep -c` over a diff counts **context**
+lines as well as changed ones, so a line that merely sits near your edit reads as
+touched. Measured on an entry inserted directly above an untouched line:
+
+```sh
+git diff base...HEAD -- f            | grep -c TARGET   # 1  — but TARGET is context
+git diff -U0 base...HEAD -- f | grep -E '^[+-][^+-]' | grep -c TARGET   # 0  — correct
+```
+
+`-U0` drops the context; the `[^+-]` guard drops the `+++`/`---` headers. The
+filtered form still answers non-zero when the line really is edited — 2 there,
+one `-` and one `+`, which is worth knowing before you compare a count against
+1.
+
 Tear it down when you are done:
 
 ```sh

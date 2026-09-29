@@ -158,6 +158,18 @@ git diff --stat                                        # every file expected, no
 <the project's type-check / build / test command>
 ```
 
+`git diff --stat` with no refs is right **here and only here** — before Step 7
+commits, while the edits are still unstaged. The moment they are committed it
+returns nothing, and so does any run of it from another worktree, so anyone
+re-checking your "every file expected" claim afterwards gets silence and reads
+it as agreement. For a check made after committing, name the refs:
+
+```sh
+git diff --stat origin/main...HEAD
+```
+
+`triage-test-failures` states the general rule and the measurements behind it.
+
 The first command is the real check and it inverts the usual one: you are
 confirming that what remains is **supposed** to remain. Read each surviving hit
 and name why it stayed. "No output" is the wrong expectation here — a repo with
