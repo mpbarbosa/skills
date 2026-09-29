@@ -27,15 +27,15 @@ find . -maxdepth 6 -name SKILL.md \
 | Names with more than one copy | 27 |
 | …of those, copies that have **diverged** | 22 |
 | …of those, a **vendored third-party collection** (see below) | 29 |
-| **Names assessed so far** | **70** |
-| **Names not yet assessed — and yours** | **16** |
+| **Names assessed so far** | **74** |
+| **Names not yet read in full — and yours** | **12** |
 
 Four container conventions are in use: `.claude/skills/`, `.github/skills/`,
 `.agents/skills/`, `.opencode/skills/`.
 
 **The survey is incomplete, but less so than it first appeared.** It covered the
 22 diverged names, the 16 in `agora_na_copa_2026`, and a later pass over what
-remained. **16 first-party names have still not been read** — their absence from
+remained. **12 first-party names have still not been read** — their absence from
 the skip lists below is ignorance, not a decision.
 
 Two corrections to an earlier count of 52 unread names, both of which inflated
@@ -61,6 +61,8 @@ the imported set and the vendored set, or the same inflation returns.
 | `verify-deploy-landed` | distilled from `agora_na_copa_2026` `go-live-prod` | reshaped, not copied |
 | `sync-version` | `olinda_copilot_sdk.ts/.github/skills` | 4 copies; see below |
 | `update-url-dependency` | distilled from **9** `update-*` skills | replaces the whole family; see below |
+| `verify-pasted-url` | distilled from **4** `place-*` skills | the verification half; see below |
+| `mutation-test-guards` | distilled from `place-external-link` | the guard-proving half |
 
 ### Choosing among diverged copies
 
@@ -155,15 +157,15 @@ Worth revisiting if the stated condition changes.
 
 ## Not yet assessed
 
-**16 first-party names**, triaged by description but not read in full:
+**12 first-party names**, triaged by description but not read in full:
 
 | Bucket | Names |
 |---|---|
-| Project-bound | `campanha-video`, `find-highlights`, `place-instagram-post`, `rodada-update` (portal_brasileirao) · `triagem-n8n` (linkedin) · `analytics` (tokentop) · `ship` (articles) |
+| Project-bound | `campanha-video`, `find-highlights`, `rodada-update` (portal_brasileirao) · `triagem-n8n` (linkedin) · `analytics` (tokentop) · `ship` (articles) |
 | `ai_workflow.js` tooling | `ai-workflow-scaffold`, `fix-preflight-log-issues`, `next-roadmap-step` |
-| Overlaps what is imported | `docker-test-fix` (→ `triage-test-failures`) · `check-prod-parity` (→ `verify-deploy-landed`, see below) |
+| Overlaps what is imported | `docker-test-fix` (→ `triage-test-failures`) |
 | Thin | `update-submodules` |
-| **Worth reading in full** | `validate-node-modules`, `copy-ts-to-project`, `place-external-link` |
+| **Worth reading in full** | `validate-node-modules` — see the open question below |
 
 ### The dependency-bump family — resolved
 
@@ -184,6 +186,43 @@ many, so a half-finished run is permanent and version *disagreement* is a
 finding rather than a no-op; and a tag existing is not the artifact being
 servable, which the test suite structurally cannot catch because tests resolve
 `https://` imports through a local mapper and never fetch what users load.
+
+### The place-* family — resolved
+
+`place-external-link` (334) · `place-instagram-post` (314) ·
+`place-youtube-video` (213) · `place-instagram-highlight` (148)
+
+Four skills, 1009 lines, across two repositories. Each routes a pasted URL into
+a curated file, and each is built on the same discipline with a different
+routing table bolted on. **The discipline became `verify-pasted-url`; the
+routing stayed behind**, being inherently per-project.
+
+`place-external-link` carried more than one skill's worth. Its guard-proving
+half became `mutation-test-guards` — three refusal assertions standing green
+against a parser with no second refusal in it, because the realistic test input
+was rejected by an earlier rule and never reached the guard.
+
+Its third general lesson is **not yet folded in anywhere**: a command in a
+skill that reads "the change" must name its refs. `git diff -- <path>` compares
+the working tree to `HEAD`, so it answers about wherever you are standing —
+returning 0 from a shared root, and 0 in the correct worktree the moment you
+commit. It fails toward *you owe nothing*. The three-dot `origin/main...HEAD`
+form is correct from anywhere at any commit state. Related: a plain `grep -c`
+over a diff counts **context** lines, so an entry inserted beside the one you
+are testing for reads as touched — `-U0` and a `^[+-]` filter are required.
+
+### `copy-ts-to-project` was read, not imported
+
+405 lines, well-organised, and almost entirely procedure — locate, propose,
+confirm, copy, adapt, test, export, document, commit. Three habits worth
+keeping: propose placement and wait rather than deciding; flag blocking
+dependencies before starting rather than on failure; smoke-test through the
+public entry point, which is what catches a module that compiles but was never
+exported.
+
+Skipped because it carries **no measured failure**, unlike every skill imported
+here, and because it is bound to a specific docs convention (`ARCHITECTURE.md`,
+`API.md`, `*-FRS.md`). Generalising it would leave a generic outline.
 
 ### `check-prod-parity` was read, not imported
 
