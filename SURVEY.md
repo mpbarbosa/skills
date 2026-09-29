@@ -202,14 +202,10 @@ half became `mutation-test-guards` — three refusal assertions standing green
 against a parser with no second refusal in it, because the realistic test input
 was rejected by an earlier rule and never reached the guard.
 
-Its third general lesson is **not yet folded in anywhere**: a command in a
-skill that reads "the change" must name its refs. `git diff -- <path>` compares
-the working tree to `HEAD`, so it answers about wherever you are standing —
-returning 0 from a shared root, and 0 in the correct worktree the moment you
-commit. It fails toward *you owe nothing*. The three-dot `origin/main...HEAD`
-form is correct from anywhere at any commit state. Related: a plain `grep -c`
-over a diff counts **context** lines, so an entry inserted beside the one you
-are testing for reads as touched — `-U0` and a `^[+-]` filter are required.
+Its third general lesson is now folded into `triage-test-failures`, with the
+narrower case noted in `sync-version`: a command that reads "the change" must
+name its refs, or it answers about wherever it is run. Nothing of
+`place-external-link` remains unimported.
 
 ### `copy-ts-to-project` was read, not imported
 
