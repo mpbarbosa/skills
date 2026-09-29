@@ -27,15 +27,15 @@ find . -maxdepth 6 -name SKILL.md \
 | Names with more than one copy | 27 |
 | …of those, copies that have **diverged** | 22 |
 | …of those, a **vendored third-party collection** (see below) | 29 |
-| **Names assessed so far** | **74** |
-| **Names not yet read in full — and yours** | **12** |
+| **Names assessed so far** | **75** |
+| **Names not yet read in full — and yours** | **11** |
 
 Four container conventions are in use: `.claude/skills/`, `.github/skills/`,
 `.agents/skills/`, `.opencode/skills/`.
 
 **The survey is incomplete, but less so than it first appeared.** It covered the
 22 diverged names, the 16 in `agora_na_copa_2026`, and a later pass over what
-remained. **12 first-party names have still not been read** — their absence from
+remained. **11 first-party names have still not been read** — their absence from
 the skip lists below is ignorance, not a decision.
 
 Two corrections to an earlier count of 52 unread names, both of which inflated
@@ -63,6 +63,7 @@ the imported set and the vendored set, or the same inflation returns.
 | `update-url-dependency` | distilled from **9** `update-*` skills | replaces the whole family; see below |
 | `verify-pasted-url` | distilled from **4** `place-*` skills | the verification half; see below |
 | `mutation-test-guards` | distilled from `place-external-link` | the guard-proving half |
+| `resolve-npm-deprecations` | `guia_js/.github/skills/validate-node-modules` | renamed; **npm-specific** |
 
 ### Choosing among diverged copies
 
@@ -157,7 +158,7 @@ Worth revisiting if the stated condition changes.
 
 ## Not yet assessed
 
-**12 first-party names**, triaged by description but not read in full:
+**11 first-party names**, triaged by description but not read in full:
 
 | Bucket | Names |
 |---|---|
@@ -165,7 +166,6 @@ Worth revisiting if the stated condition changes.
 | `ai_workflow.js` tooling | `ai-workflow-scaffold`, `fix-preflight-log-issues`, `next-roadmap-step` |
 | Overlaps what is imported | `docker-test-fix` (→ `triage-test-failures`) |
 | Thin | `update-submodules` |
-| **Worth reading in full** | `validate-node-modules` — see the open question below |
 
 ### The dependency-bump family — resolved
 
@@ -229,12 +229,21 @@ converting fetch path drops HTML attributes so an absent marker may be a fetcher
 artifact; and establish that a probe is observable at all before treating its
 absence as evidence.
 
-### `validate-node-modules` — open question
+### `validate-node-modules` — imported as `resolve-npm-deprecations`
 
-Solid and well-structured, but its value is its npm command sequences. It would
-have to be imported as an ecosystem-specific skill; generalizing it across
-package managers would gut it. **Undecided** — this collection is otherwise
-ecosystem-agnostic.
+The open question is settled: **this collection accepts ecosystem-specific
+skills**, and this is the first. Generalising it across package managers would
+have removed the npm commands that are its substance.
+
+Renamed because the original name misdescribes it — it does not validate
+`node_modules`, it clears deprecation warnings — and every other skill here is
+named for what it does. The source remains at
+`guia_js/.github/skills/validate-node-modules`.
+
+Its regression check was rebuilt rather than carried across. It took a test
+count by grepping the human summary, which yields a number for Jest and nothing
+for `node --test` or mocha; when both sides yield nothing the comparison reports
+no regression having measured nothing.
 
 ## What makes a skill worth importing
 
