@@ -27,15 +27,15 @@ find . -maxdepth 6 -name SKILL.md \
 | Names with more than one copy | 27 |
 | …of those, copies that have **diverged** | 22 |
 | …of those, a **vendored third-party collection** (see below) | 29 |
-| **Names assessed so far** | **66** |
-| **Names not yet assessed — and yours** | **20** |
+| **Names assessed so far** | **70** |
+| **Names not yet assessed — and yours** | **16** |
 
 Four container conventions are in use: `.claude/skills/`, `.github/skills/`,
 `.agents/skills/`, `.opencode/skills/`.
 
 **The survey is incomplete, but less so than it first appeared.** It covered the
 22 diverged names, the 16 in `agora_na_copa_2026`, and a later pass over what
-remained. **20 first-party names have still not been read** — their absence from
+remained. **16 first-party names have still not been read** — their absence from
 the skip lists below is ignorance, not a decision.
 
 Two corrections to an earlier count of 52 unread names, both of which inflated
@@ -60,6 +60,7 @@ the imported set and the vendored set, or the same inflation returns.
 | `triage-test-failures` | distilled from `agora_na_copa_2026` `test-commit-sync` | reshaped, not copied |
 | `verify-deploy-landed` | distilled from `agora_na_copa_2026` `go-live-prod` | reshaped, not copied |
 | `sync-version` | `olinda_copilot_sdk.ts/.github/skills` | 4 copies; see below |
+| `update-url-dependency` | distilled from **9** `update-*` skills | replaces the whole family; see below |
 
 ### Choosing among diverged copies
 
@@ -154,27 +155,35 @@ Worth revisiting if the stated condition changes.
 
 ## Not yet assessed
 
-**20 first-party names**, triaged by description but not read in full:
+**16 first-party names**, triaged by description but not read in full:
 
 | Bucket | Names |
 |---|---|
 | Project-bound | `campanha-video`, `find-highlights`, `place-instagram-post`, `rodada-update` (portal_brasileirao) · `triagem-n8n` (linkedin) · `analytics` (tokentop) · `ship` (articles) |
 | `ai_workflow.js` tooling | `ai-workflow-scaffold`, `fix-preflight-log-issues`, `next-roadmap-step` |
-| Dependency-bump pattern | `update-ibira`, `update-olinda-sdk`, `update-olinda-utils`, `update-paraty-geocore` |
 | Overlaps what is imported | `docker-test-fix` (→ `triage-test-failures`) · `check-prod-parity` (→ `verify-deploy-landed`, see below) |
 | Thin | `update-submodules` |
 | **Worth reading in full** | `validate-node-modules`, `copy-ts-to-project`, `place-external-link` |
 
-### The dependency-bump pattern has nine instances
+### The dependency-bump family — resolved
 
 `update-bessa` · `update-guia` · `update-ibira` · `update-olinda-copilot-sdk` ·
 `update-olinda-sdk` · `update-olinda-utils` · `update-pajussara` ·
 `update-pajussara-tui-comp` · `update-paraty-geocore`
 
-All nine bump a sibling library distributed outside the package registry — a
-jsDelivr CDN URL or a GitHub tarball — hand-maintained separately in each repo.
-Nine copies of one procedure is the strongest standing case in this survey for
-writing a single general skill.
+Nine names, 23 files, all bumping a sibling library distributed outside the
+package registry — a jsDelivr CDN URL, a GitHub tarball, a git clone — and each
+hand-maintained in its own repo. **Replaced by `update-url-dependency`.** None
+of the nine is a candidate any more.
+
+Three hazards from reading them are recorded in that skill and are worth knowing
+independently: the same release is written two ways (`v`-prefixed as a git tag,
+bare as a CDN path), so one blanket replacement always misses half the
+occurrences; the early-exit guard reads one location while the update writes
+many, so a half-finished run is permanent and version *disagreement* is a
+finding rather than a no-op; and a tag existing is not the artifact being
+servable, which the test suite structurally cannot catch because tests resolve
+`https://` imports through a local mapper and never fetch what users load.
 
 ### `check-prod-parity` was read, not imported
 
