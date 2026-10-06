@@ -111,12 +111,16 @@ Two of them, neither testing the prose:
   parses, `name` matching the directory, a description that exists and fits,
   code fences that close.
 - [`checks/measured-claims.sh`](checks/measured-claims.sh) — rebuilds the
-  situations the skills quote and re-asserts the numbers they print. 31 of them:
+  situations the skills quote and re-asserts the numbers they print. 59 of them:
   a branch deleted on origin and never pruned here, so `@{upstream}` still
   resolves while `ls-remote` reports nothing; `pgrep` matching the command line
   that runs it; the removals that exit 0 and leave the thing behind, from
-  `git branch -d` to `kill` against a process ignoring `SIGTERM`; and what a
-  listener scan cannot see, including a client and an owner.
+  `git branch -d` to `kill` against a process ignoring `SIGTERM`; what a listener
+  scan cannot see, including a client and an owner; what `git branch -d` really
+  compares against, in both the destructive and the merely annoying direction; a
+  prepared branch answering every landing test exactly like a merged one; and
+  `readlink` appending `" (deleted)"` to the cwd of a process whose directory was
+  removed underneath it.
 
 The point is the second one. Those claims are about git, procps and the shell,
 not about this repository, so they can stop being true without anything here
@@ -135,10 +139,20 @@ claim: a socket test that had stopped holding its connection open, so the thing
 it measured was no longer established. Without the control it would have read as
 the claim failing.
 
-`session-dropped` was audited the same way and corrected the same way: its
-listener scan used bare `ss -ltn`, which prints a port and no owner, while the
-check two paragraphs later asks you to say whose it is. `ss -ltnp` attributes
-your own processes without root.
+`session-dropped` and `session-teardown` were audited the same way, and each
+turned out to have the same listener-scan defect: bare `ss -ltn` prints a port
+and no owner, while the step right after it asks you to say whose each one was.
+`session-teardown` already used `ss -ltnp` correctly 190 lines earlier, so it
+disagreed with itself. `ss -ltnp` attributes your own processes without root.
+
+`session-teardown` had a second one. It said the remote-tracking ref survives
+"after both deletions have succeeded" — but your own `git push origin --delete`
+prunes it, and the `git branch -dr` it then prescribes fails with
+`remote-tracking branch not found`. The stale ref is real and worth knowing
+about; it just belongs to the case where the remote branch went *without* you.
+The same paragraph now records that `git branch -a` is wrong in both directions:
+it lists a branch deleted on the server, and omits one pushed by someone else
+and never fetched here.
 
 Everything these scripts strictly need is `git`, `pgrep` and a POSIX shell.
 Claims that need `ss`, `python3` or `gh` are skipped rather than failed when

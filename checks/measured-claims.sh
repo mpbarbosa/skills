@@ -279,6 +279,186 @@ else
      "$(gh repo view --json zzNoSuchField 2>&1 | grep -c '^  deleteBranchOnMerge$' | tr -d ' ')" "1"
 fi
 
+# ---------------------------------------------------------------------------
+# git branch -d compares against the branch's upstream, not the default branch.
+#   session-teardown, "Branches" — and the entry criterion in README.md.
+# ---------------------------------------------------------------------------
+echo
+echo "what git branch -d actually checks"
+
+b=$(mktemp -d) || halt "could not make a fixture directory"
+keep "$b"
+git init -q --bare "$b/origin.git" || halt "git init --bare failed"
+git init -q -b main "$b/w"         || halt "git init failed"
+cd "$b/w"                          || halt "could not enter the fixture"
+git config user.email checks@example.invalid
+git config user.name  checks
+echo seed > seed; git add seed; git commit -q -m init
+git remote add origin "$b/origin.git"
+git push -q -u origin main || halt "push to the fixture remote failed"
+
+# A branch that was pushed and merged nowhere: the state of every branch whose
+# PR is still open.
+git checkout -q -b pushed-only
+echo work > work; git add work; git commit -q -m work
+git push -q -u origin pushed-only || halt "push of pushed-only failed"
+git checkout -q main
+
+eq "control: the branch has landed nowhere" \
+   "$(git rev-list --count origin/main..pushed-only)" "1"
+
+out=$(git branch -d pushed-only 2>&1); rc=$?
+eq "git branch -d deletes it anyway, exit 0" "$rc" "0"
+
+eq "and says so in a warning rather than a refusal" \
+   "$(printf '%s' "$out" | grep -c 'but not yet merged to HEAD' | tr -d ' ')" "1"
+
+eq "the warning compares against the remote-tracking ref" \
+   "$(printf '%s' "$out" | grep -c "refs/remotes/origin/pushed-only" | tr -d ' ')" "1"
+
+eq "the branch really is gone" \
+   "$(git branch --format='%(refname:short)' | grep -c '^pushed-only$' | tr -d ' ')" "0"
+
+# The mirror image: fully merged into main, but ahead of its own upstream.
+git checkout -q -b ahead
+echo one > one; git add one; git commit -q -m one
+git push -q -u origin ahead || halt "push of ahead failed"
+echo two > two; git add two; git commit -q -m two
+git checkout -q main
+git merge -q ahead          || halt "merge of ahead failed"
+git push -q origin main     || halt "push of main failed"
+
+eq "control: this branch has fully landed" \
+   "$(git rev-list --count origin/main..ahead)" "0"
+
+out=$(git branch -d ahead 2>&1); rc=$?
+eq "git branch -d refuses it anyway, exit 1" "$rc" "1"
+
+eq "calling a landed branch not fully merged" \
+   "$(printf '%s' "$out" | grep -c 'is not fully merged' | tr -d ' ')" "1"
+
+# ---------------------------------------------------------------------------
+# Landed, or never started? The ancestry test cannot tell.
+#   session-teardown, "The asymmetry that governs every command here".
+# ---------------------------------------------------------------------------
+echo
+echo "a branch that never held work answers like a merged one"
+
+git worktree add -q -b prepared "$b/prepared" >/dev/null 2>&1 \
+  || halt "git worktree add failed"
+git checkout -q -b landed
+echo real > real; git add real; git commit -q -m real
+git checkout -q main
+git merge -q landed     || halt "merge of landed failed"
+git push -q origin main || halt "push of main failed"
+
+for br in prepared landed; do
+  git merge-base --is-ancestor "$br" origin/main
+  eq "is-ancestor says landed for '$br'" "$?" "0"
+  eq "rev-list counts 0 ahead for '$br'" \
+     "$(git rev-list --count "origin/main..$br")" "0"
+done
+
+# The reflog is what separates them.
+for pair in "prepared same" "landed different"; do
+  br=${pair% *}; want=${pair#* }
+  born=$(git reflog show "$br" --format='%H' | tail -1)
+  tip=$(git rev-parse "$br")
+  eq "reflog birth is $want from the tip for '$br'" \
+     "$([ "$born" = "$tip" ] && echo same || echo different)" "$want"
+done
+
+git reflog expire --expire=now --expire-unreachable=now --all 2>/dev/null
+eq "an expired reflog gives an empty birth, which is UNKNOWN" \
+   "$(git reflog show prepared --format='%H' 2>/dev/null | tail -1 | wc -c | tr -d ' ')" "0"
+
+# ---------------------------------------------------------------------------
+# Two deletions, and the remote-tracking ref that lingers only sometimes.
+#   session-teardown, "Local and remote are two deletions" and "Verify after".
+# ---------------------------------------------------------------------------
+echo
+echo "the second deletion, and what it does to the cached ref"
+
+git checkout -q -b doomed
+git commit -q --allow-empty -m x
+git push -q -u origin doomed || halt "push of doomed failed"
+git checkout -q main
+git branch -D doomed >/dev/null 2>&1
+
+eq "after a local-only delete, branch -a still lists the remote ref" \
+   "$(git branch -a | grep -c 'remotes/origin/doomed' | tr -d ' ')" "1"
+
+git push -q origin --delete doomed 2>/dev/null
+eq "but your own push --delete prunes it" \
+   "$(git branch -a | grep -c 'remotes/origin/doomed' | tr -d ' ')" "0"
+
+eq "so branch -dr then has nothing to clear" \
+   "$(git branch -dr origin/doomed 2>&1 | grep -c 'not found' | tr -d ' ')" "1"
+
+eq "control: the remote branch is gone" \
+   "$(git ls-remote --heads origin doomed | wc -l | tr -d ' ')" "0"
+
+# Deleting what is already deleted: two error lines for the state you wanted.
+out=$(git push origin --delete doomed 2>&1); rc=$?
+eq "a second push --delete exits non-zero" \
+   "$([ "$rc" -ne 0 ] && echo nonzero || echo zero)" "nonzero"
+
+eq "saying the remote ref does not exist" \
+   "$(printf '%s' "$out" | grep -c 'remote ref does not exist' | tr -d ' ')" "1"
+
+eq "and failed to push some refs" \
+   "$(printf '%s' "$out" | grep -c 'failed to push some refs' | tr -d ' ')" "1"
+
+# The cache is wrong in the other direction too: a branch that IS on the server
+# and was never fetched here.
+git clone -q "$b/origin.git" "$b/fresh" 2>/dev/null || halt "fixture clone failed"
+git checkout -q -b theirs
+git commit -q --allow-empty -m theirs
+git push -q -u origin theirs || halt "push of theirs failed"
+
+eq "a never-fetched branch is missing from branch -a" \
+   "$(git -C "$b/fresh" branch -a | grep -c 'remotes/origin/theirs' | tr -d ' ')" "0"
+
+eq "while ls-remote finds it" \
+   "$(git -C "$b/fresh" ls-remote --heads origin theirs | wc -l | tr -d ' ')" "1"
+
+cd / || exit 1
+
+# ---------------------------------------------------------------------------
+# A cwd that no longer resolves. readlink marks it; the obvious glob does not.
+#   session-teardown, "Scanning cwds to ask who is in a worktree".
+# ---------------------------------------------------------------------------
+echo
+echo "readlink on a directory removed underneath a running process"
+
+occupied=$(mktemp -d) || halt "could not make a probe directory"
+keep "$occupied"
+mkdir -p "$occupied/wt"
+( cd "$occupied/wt" && exec sleep 30 ) & sitter=$!
+sleep 1
+
+before=$(readlink "/proc/$sitter/cwd" 2>/dev/null)
+eq "control: readlink resolves the live directory" \
+   "$([ "$before" = "$occupied/wt" ] && echo exact || echo "[$before]")" "exact"
+
+rm -rf "$occupied/wt"
+sleep 1
+after=$(readlink "/proc/$sitter/cwd" 2>/dev/null)
+
+eq "once removed, readlink appends the marker" \
+   "$([ "$after" = "$occupied/wt (deleted)" ] && echo marked || echo "[$after]")" "marked"
+
+eq "the trailing-glob form reports both states identically" \
+   "$(naive() { case "$1" in *wt*) echo live ;; *) echo none ;; esac; }
+     printf '%s/%s' "$(naive "$before")" "$(naive "$after")")" "live/live"
+
+eq "giving the marker its own arm separates them" \
+   "$(arms() { case "$1" in *"(deleted)") echo gone ;; *wt*) echo live ;; *) echo none ;; esac; }
+     printf '%s/%s' "$(arms "$before")" "$(arms "$after")")" "live/gone"
+
+kill "$sitter" 2>/dev/null
+wait "$sitter" 2>/dev/null
+
 echo
 [ "$skips" -gt 0 ] && printf '%s claims skipped for want of an optional tool\n' "$skips"
 if [ "$fails" -eq 0 ]; then

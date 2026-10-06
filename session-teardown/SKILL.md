@@ -194,11 +194,20 @@ This matters more than it looks, because the section below primes you to read
 any failure here as real: removal *can* partly fail, and telling the two apart
 by exit code alone is not possible.
 
-**Deleting a local branch does not prune its remote-tracking ref.** So
-`origin/<branch>` keeps appearing in `git branch -a` after both deletions have
-succeeded, which reads as a leftover and is not one. Clear it with
-`git branch -dr origin/<branch>`, and see the verify step below for why that
-listing is the wrong one to confirm against.
+**Deleting a local branch does not prune its remote-tracking ref** — but your
+own second deletion does, so which leftover you get depends on who removed the
+remote branch. Measured:
+
+    git branch -D <branch>                 -> branch -a still lists origin/<branch>
+    git push origin --delete <branch>      -> branch -a no longer lists it
+    git branch -dr origin/<branch>  then   -> 1, "remote-tracking branch not found"
+
+So reach for `git branch -dr` only when the remote branch went *without* you:
+a merge with `deleteBranchOnMerge` on, a person clicking the button, another
+session tidying. That is the common case and the stale ref it leaves is the one
+worth knowing about — but after your own `push --delete` there is nothing to
+clear, and the command says so with an error. See the verify step below for why
+`git branch -a` is the wrong listing to confirm a deletion against either way.
 
 **Servers:** stop by **recorded PID**. `pkill -f <pattern>` matches every
 session's process, and has. If you did not record the PID, attribute it first
@@ -275,16 +284,24 @@ what is actually gone:
 git worktree list
 git branch --format='%(refname:short)'       # local only
 git ls-remote --heads origin                 # asks the remote, not a cached ref
-ss -ltn 2>/dev/null | grep -E ':(3[0-9]{3}|[45][0-9]{3}|8[0-9]{3})'
+ss -ltnp 2>/dev/null | grep -E ':(3[0-9]{3}|[45][0-9]{3}|8[0-9]{3})'
 git status --porcelain -uall
 ```
 
+`-ltnp`, as above: bare `ss -ltn` prints a port and no owner, and this step is
+where you report whose each one was.
+
 **Not `git branch -a` — it answers from a cache.** Remote-tracking refs are
-whatever the last fetch left behind, and deleting a branch does not prune its
-own, so `git branch -a` lists `origin/<branch>` after both deletions succeeded.
-Confirming a *deletion* against it is the mistake this document spends its first
-half warning about: reading a signal for what it resembles rather than what it
-measures. `git ls-remote` asks the remote.
+whatever the last fetch left behind, and the cache is wrong in both directions.
+Measured:
+
+    someone else deleted it on origin      -> branch -a: lists it;  ls-remote: 0
+    someone else pushed it, never fetched  -> branch -a: nothing;   ls-remote: 1
+
+So the listing says "still there" for a branch that is gone, and "gone" for a
+branch that is there. Confirming a *deletion* against it is the mistake this
+document spends its first half warning about: reading a signal for what it
+resembles rather than what it measures. `git ls-remote` asks the remote.
 
 ## An empty teardown is the good outcome
 
