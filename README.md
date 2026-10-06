@@ -32,6 +32,7 @@ Skills are discovered at `~/.claude/skills/<name>/SKILL.md` (all projects) or
 
 ```bash
 for d in ~/Documents/GitHub/skills/*/; do
+  [ -f "$d/SKILL.md" ] || continue    # checks/ is not a skill
   ln -sfn "${d%/}" ~/.claude/skills/"$(basename "$d")"
 done
 ```
@@ -98,6 +99,39 @@ a diverged skill — the newest and longest was an adapted instance, not a bette
 template. Counting how often a copy names its own host repository picks the
 right one.
 
+## Checks
+
+```bash
+sh checks/run
+```
+
+Two of them, neither testing the prose:
+
+- [`checks/skill-structure.sh`](checks/skill-structure.sh) — frontmatter that
+  parses, `name` matching the directory, a description that exists and fits,
+  code fences that close.
+- [`checks/measured-claims.sh`](checks/measured-claims.sh) — rebuilds the
+  situations the skills quote and re-asserts the numbers they print. A branch
+  deleted on origin and never pruned here, so `@{upstream}` still resolves while
+  `ls-remote` reports nothing; `pgrep` matching the command line that runs it.
+
+The point is the second one. Those claims are about git, procps and the shell,
+not about this repository, so they can stop being true without anything here
+changing. The check goes red when the environment moves under a documented
+number, and stays green when a sentence is reworded — which is the opposite of
+what a test over the Markdown would do.
+
+It carries positive controls for the same reason: a probe that cannot see a
+branch which *is* on the remote proves nothing by failing to see one that is
+not. Writing it found a defect in `session-pending` — its `pgrep` examples used
+`generate\.ts`, and the escaped dot is precisely the form that does *not*
+self-match, so the quoted `-> 1` and `-> 2` did not reproduce. The recommended
+`| grep -v ' -c '` filter turned out to hide genuine processes launched through
+a shell. Both are corrected, and both are now asserted.
+
+Everything these scripts need is `git`, `pgrep` and a POSIX shell. There is no
+package manager in this repository and nothing to install.
+
 ## Conventions
 
 - One directory per skill, at the repository root, containing `SKILL.md`.
@@ -105,3 +139,6 @@ right one.
 - Every shell snippet is exercised before it ships. Where a skill quotes
   measured output — byte counts, exit codes, HTTP statuses — those numbers came
   from running it.
+- A quoted number that depends on the environment rather than on this
+  repository gets an assertion in `checks/measured-claims.sh`, with a positive
+  control.

@@ -1,0 +1,14 @@
+#!/bin/sh
+# Runs every check. Exits non-zero if any of them does.
+set -u
+here=$(dirname "$0")
+status=0
+
+for c in "$here"/skill-structure.sh "$here"/measured-claims.sh; do
+  printf '== %s\n' "$(basename "$c")"
+  sh "$c" || status=1
+  echo
+done
+
+[ "$status" -eq 0 ] && echo "all checks pass" || echo "checks failed"
+exit "$status"
