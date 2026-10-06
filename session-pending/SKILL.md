@@ -60,18 +60,35 @@ ls -l --time-style=+%H:%M:%S <path>     # written seconds ago, or hours?
 pgrep -af '<producing-command>'         # is it still running?
 ```
 
-**`pgrep` will match your own command, always.** Every tool-run command sits in
-the process table as a `sh -c …` / `zsh -c …` line containing the whole pattern
-for as long as the `pgrep` inside it runs, so this is guaranteed rather than
-incidental. Measured with **nothing** actually running:
+**`pgrep` can match the command line that is running it.** A tool-run command
+sits in the process table as a `sh -c …` / `zsh -c …` line for as long as the
+`pgrep` inside it runs, so a pattern that matches *its own text* finds that
+wrapper and reports a process that does not exist. Being more specific does not
+help: a longer pattern is still on your own command line. Measured with
+**nothing** actually running:
 
-    pgrep -cf 'generate\.ts'                 -> 1   the wrapper
-    pgrep -cf 'tsx scripts/generate\.ts'     -> 2   also the wrapper
-    pgrep -af 'generate\.ts' | grep -v ' -c ' -> 0  correct
+    pgrep -cf 'generate.ts'      -> 1   the wrapper, not a generator
+    pgrep -cf '[g]enerate\.ts'   -> 0   correct
 
-Being more specific does not help — a longer pattern is still in your own command
-line. **Read the matches, or exclude the wrapper; never count, and never gate an
-`if` on it.** A count is a silent false positive every single time.
+Whether it self-matches **depends on the pattern**, which is why this is easy to
+get wrong in both directions. Escaping the dot — `generate\.ts` — happens to
+break the self-match, because the regex then wants a literal dot where your
+command line has a backslash. That is luck, not a technique, and it fails the
+moment the unescaped name appears anywhere else on the line. **Bracket one
+character instead:** `[g]enerate\.ts` matches `generate.ts` and can never match
+itself, whatever else you typed.
+
+Do not reach for `| grep -v ' -c '` to drop the wrapper. It drops every line
+containing ` -c `, and a generator or dev server started *through* a shell — an
+npm script, a preview launcher, `sh -c 'tsx scripts/generate.ts'` — has exactly
+that on its command line. Measured with one of those genuinely running:
+
+    pgrep -cf '[g]enerate\.ts'                -> 1   sees it
+    pgrep -af 'generate.ts' | grep -v ' -c '   -> 0   hides it
+
+A false negative is the dangerous direction here: it reports nobody running the
+generator while someone is, which is the reading that gets a dirty tree swept.
+**Read the matches; never gate an `if` on a count.**
 
 For PRs, ownership often **cannot** be established: sessions frequently share one
 forge account, so `--author` cannot separate you from anyone else. Say so rather
