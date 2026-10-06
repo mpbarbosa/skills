@@ -25,15 +25,34 @@ git worktree list                       # 1. registrations, incl. stale ones
 git branch --format='%(refname:short)'  # 2. local branches
 git ls-remote --heads origin            # 3. REMOTE branches — the usual survivor
 git status --porcelain -uall            # 4. the working tree
-ss -ltn 2>/dev/null | grep -E ':(3[0-9]{3}|[45][0-9]{3}|8[0-9]{3})'   # 5. servers
+ss -ltnp 2>/dev/null | grep -E ':(3[0-9]{3}|[45][0-9]{3}|8[0-9]{3})'  # 5. servers
 ```
 
 Narrow that port pattern to the range this project actually uses.
+
+**`-ltnp`, not bare `-ltn`.** Without `p` you get a port and no owner, and this
+check then asks you to decide whose it is. It needs no root to attribute what
+*you* started. Measured on an unprivileged account:
+
+    ss -ltn   ->  LISTEN 0 1 127.0.0.1:46129 0.0.0.0:*
+    ss -ltnp  ->  LISTEN 0 1 127.0.0.1:46129 0.0.0.0:* users:(("python3",pid=249429,fd=3))
 
 Local and remote are **separate deletions**. Whether a merge removes the remote
 branch is a repository setting (`gh repo view --json deleteBranchOnMerge`), so
 `git branch -d` succeeding tells you nothing about `origin`. That is the leftover
 this check exists to catch, and it is the one that has actually happened.
+
+Three other removals report success and leave the thing behind. Measured here:
+
+    git branch -d <merged branch>   -> 0, and ls-remote still lists it on origin
+    rm -rf <worktree directory>     -> registration stays, flagged prunable
+    git worktree remove <untracked> -> 128, "contains modified or untracked files"
+    kill <pid ignoring SIGTERM>     -> 0, and the process is still running
+
+The first and the last are the pair to distrust, because both exit 0. `kill`
+reports that it *sent* a signal, never that anything died. Re-read the listing
+instead of the exit code, and ask `kill -0 <pid>` whether the process is still
+there.
 
 For anything still listed, decide which of three it is — **yours and leftover**,
 **yours and deliberately kept**, or **not yours**. Only the first is a failure.
@@ -47,7 +66,8 @@ Confirm these by recall rather than command, since nothing else can:
 - **Background tasks and monitors** — terminated, or still running?
 - **Resources held through a tool rather than a port** — a browser pane, a
   preview server released only by its own `serverId`. A port scan cannot see a
-  client.
+  client: measured, a connected client's local port shows up in
+  `ss -tn state established` and **never** in `ss -ltn`, whatever you grep for.
 - **Promises** — did every handoff get acknowledged, or only sent? A message
   delivered to a session that never replied is not a completed handoff.
 - **Anything you said you would do next.**

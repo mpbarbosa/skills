@@ -111,9 +111,12 @@ Two of them, neither testing the prose:
   parses, `name` matching the directory, a description that exists and fits,
   code fences that close.
 - [`checks/measured-claims.sh`](checks/measured-claims.sh) — rebuilds the
-  situations the skills quote and re-asserts the numbers they print. A branch
-  deleted on origin and never pruned here, so `@{upstream}` still resolves while
-  `ls-remote` reports nothing; `pgrep` matching the command line that runs it.
+  situations the skills quote and re-asserts the numbers they print. 31 of them:
+  a branch deleted on origin and never pruned here, so `@{upstream}` still
+  resolves while `ls-remote` reports nothing; `pgrep` matching the command line
+  that runs it; the removals that exit 0 and leave the thing behind, from
+  `git branch -d` to `kill` against a process ignoring `SIGTERM`; and what a
+  listener scan cannot see, including a client and an owner.
 
 The point is the second one. Those claims are about git, procps and the shell,
 not about this repository, so they can stop being true without anything here
@@ -123,14 +126,24 @@ what a test over the Markdown would do.
 
 It carries positive controls for the same reason: a probe that cannot see a
 branch which *is* on the remote proves nothing by failing to see one that is
-not. Writing it found a defect in `session-pending` — its `pgrep` examples used
-`generate\.ts`, and the escaped dot is precisely the form that does *not*
-self-match, so the quoted `-> 1` and `-> 2` did not reproduce. The recommended
-`| grep -v ' -c '` filter turned out to hide genuine processes launched through
-a shell. Both are corrected, and both are now asserted.
+not. They have earned it twice. One caught a defect in `session-pending` — its
+`pgrep` examples used `generate\.ts`, and the escaped dot is precisely the form
+that does *not* self-match, so the quoted `-> 1` and `-> 2` did not reproduce;
+the recommended `| grep -v ' -c '` filter turned out to hide genuine processes
+launched through a shell. Another caught a broken *fixture* rather than a broken
+claim: a socket test that had stopped holding its connection open, so the thing
+it measured was no longer established. Without the control it would have read as
+the claim failing.
 
-Everything these scripts need is `git`, `pgrep` and a POSIX shell. There is no
-package manager in this repository and nothing to install.
+`session-dropped` was audited the same way and corrected the same way: its
+listener scan used bare `ss -ltn`, which prints a port and no owner, while the
+check two paragraphs later asks you to say whose it is. `ss -ltnp` attributes
+your own processes without root.
+
+Everything these scripts strictly need is `git`, `pgrep` and a POSIX shell.
+Claims that need `ss`, `python3` or `gh` are skipped rather than failed when
+those are absent. There is no package manager in this repository and nothing to
+install.
 
 ## Conventions
 
