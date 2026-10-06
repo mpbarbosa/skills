@@ -111,53 +111,81 @@ Two of them, neither testing the prose:
   parses, `name` matching the directory, a description that exists and fits,
   code fences that close.
 - [`checks/measured-claims.sh`](checks/measured-claims.sh) — rebuilds the
-  situations the skills quote and re-asserts the numbers they print. 59 of them:
-  a branch deleted on origin and never pruned here, so `@{upstream}` still
-  resolves while `ls-remote` reports nothing; `pgrep` matching the command line
-  that runs it; the removals that exit 0 and leave the thing behind, from
-  `git branch -d` to `kill` against a process ignoring `SIGTERM`; what a listener
-  scan cannot see, including a client and an owner; what `git branch -d` really
-  compares against, in both the destructive and the merely annoying direction; a
-  prepared branch answering every landing test exactly like a merged one; and
-  `readlink` appending `" (deleted)"` to the cwd of a process whose directory was
-  removed underneath it.
+  situations the skills quote and re-asserts the numbers they print. **115 of
+  them**, over seven skills.
 
-The point is the second one. Those claims are about git, procps and the shell,
-not about this repository, so they can stop being true without anything here
-changing. The check goes red when the environment moves under a documented
+The second one is the point. Those claims are about git, procps, perl and the
+shell, not about this repository, so they can stop being true without anything
+here changing. The check goes red when the environment moves under a documented
 number, and stays green when a sentence is reworded — which is the opposite of
-what a test over the Markdown would do.
+what a test over the Markdown would do. Each section was mutation-tested: the
+claim was broken deliberately and the check watched to go red on the right
+line, because a check only ever seen passing is the thing
+[`mutation-test-guards`](mutation-test-guards/) is about. It prints the `git` and `pgrep` versions it measured against, since that
+is what the numbers belong to.
 
-It carries positive controls for the same reason: a probe that cannot see a
-branch which *is* on the remote proves nothing by failing to see one that is
-not. They have earned it twice. One caught a defect in `session-pending` — its
-`pgrep` examples used `generate\.ts`, and the escaped dot is precisely the form
-that does *not* self-match, so the quoted `-> 1` and `-> 2` did not reproduce;
-the recommended `| grep -v ' -c '` filter turned out to hide genuine processes
-launched through a shell. Another caught a broken *fixture* rather than a broken
-claim: a socket test that had stopped holding its connection open, so the thing
-it measured was no longer established. Without the control it would have read as
-the claim failing.
+What is covered, and the measurement each section turns on:
 
-`session-dropped` and `session-teardown` were audited the same way, and each
-turned out to have the same listener-scan defect: bare `ss -ltn` prints a port
-and no owner, while the step right after it asks you to say whose each one was.
-`session-teardown` already used `ss -ltnp` correctly 190 lines earlier, so it
-disagreed with itself. `ss -ltnp` attributes your own processes without root.
+| Skill | The claim the check rebuilds |
+|---|---|
+| `session-pending` | `@{upstream}` resolving against a branch deleted on the server; `pgrep` matching the command line that runs it |
+| `session-dropped` | removals that exit 0 and leave the thing behind, from `git branch -d` to `kill` against a process ignoring `SIGTERM`; what a listener scan cannot see, including a client and an owner |
+| `session-teardown` | what `git branch -d` really compares against, in both directions; a prepared branch answering every landing test like a merged one; `readlink` appending `" (deleted)"` |
+| `mutation-test-guards` | the pipe that turns a failing suite into three `PASS` lines and an exit 0; deleting the second of two refusals and watching the first two rows not move |
+| `sync-version` | an unanchored replacement eating longer versions that share a prefix, and the four anchoring forms that get it wrong before the one that does not |
+| `triage-test-failures` | one change seen through two diff forms in three states; a `grep -c` over a diff counting context as changed |
+| `resolve-npm-deprecations` | a count grepped from a human summary yielding nothing for two of three runners, and the two guards in front of comparing it |
 
-`session-teardown` had a second one. It said the remote-tracking ref survives
-"after both deletions have succeeded" — but your own `git push origin --delete`
-prunes it, and the `git branch -dr` it then prescribes fails with
-`remote-tracking branch not found`. The stale ref is real and worth knowing
-about; it just belongs to the case where the remote branch went *without* you.
-The same paragraph now records that `git branch -a` is wrong in both directions:
-it lists a branch deleted on the server, and omits one pushed by someone else
-and never fetched here.
+Positive controls throughout, for one reason: a probe that cannot see a branch
+which *is* on the remote proves nothing by failing to see one that is not. They
+have earned it twice — once catching a defect, and once catching a broken
+*fixture* rather than a broken claim, where a socket test had stopped holding
+its connection open. Without the control that would have read as the claim
+failing.
+
+### What the audit found
+
+Four of the seven skills were corrected, and three were confirmed exactly as
+written:
+
+- `session-pending` — its `pgrep` examples used `generate\.ts`, and the escaped
+  dot is precisely the form that does *not* self-match, so the quoted `-> 1` and
+  `-> 2` did not reproduce. The recommended `| grep -v ' -c '` filter turned out
+  to hide genuine processes launched through a shell.
+- `session-dropped` and `session-teardown` — both scanned listeners with bare
+  `ss -ltn`, which prints a port and no owner, while the step right after asks
+  you to say whose each one was. `session-teardown` already used `ss -ltnp`
+  correctly 190 lines earlier, so it disagreed with itself.
+- `session-teardown`, again — it said the remote-tracking ref survives "after
+  both deletions have succeeded", but your own `git push origin --delete` prunes
+  it and the `git branch -dr` it prescribes then fails. The stale ref belongs to
+  the case where the remote branch went *without* you. That paragraph now also
+  records that `git branch -a` is wrong in both directions: it lists a branch
+  deleted on the server, and omits one pushed by someone else and never fetched.
+- `mutation-test-guards` — an addition rather than a correction, of exactly the
+  kind it exists to catch. `${PIPESTATUS[0]}` recovers a status from behind a
+  pipe only when read as the very next thing; one intervening command resets the
+  array, and `st=$?` is one. Following the skill as written produced the false
+  green the skill is about.
+- `sync-version`, `triage-test-failures` and `resolve-npm-deprecations` needed
+  no correction. All nine anchoring cases, the six-cell diff table, the
+  `1`/`0`/`2` diff-grep counts and the three-runner summary patterns reproduced
+  exactly as printed.
+
+### Not covered
+
+`verify-deploy-landed`, `verify-pasted-url` and `update-url-dependency` rest on
+how real hosts answer — a `200` for an identifier that does not exist, a
+converting fetch path dropping HTML attributes. Those cannot be rebuilt from a
+fixture without standing up the thing being described, and asserting them means
+sending traffic to third parties on every run, so they are not asserted here.
+`import-adapt-guides` and `verify-workflow-shell` carry no quoted measurement to
+re-check.
 
 Everything these scripts strictly need is `git`, `pgrep` and a POSIX shell.
-Claims that need `ss`, `python3` or `gh` are skipped rather than failed when
-those are absent. There is no package manager in this repository and nothing to
-install.
+Claims that need `ss`, `python3`, `perl`, `bash` or `gh` are skipped rather than
+failed when those are absent. There is no package manager in this repository and
+nothing to install.
 
 ## Conventions
 

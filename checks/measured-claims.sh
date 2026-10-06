@@ -459,6 +459,353 @@ eq "giving the marker its own arm separates them" \
 kill "$sitter" 2>/dev/null
 wait "$sitter" 2>/dev/null
 
+# ---------------------------------------------------------------------------
+# A failing run that reports success.
+#   mutation-test-guards, "You have to be able to see red".
+# ---------------------------------------------------------------------------
+echo
+echo "exit status through a pipe"
+
+false
+eq "false exits 1" "$?" "1"
+
+false | tail -5
+eq "false | tail -5 exits 0 — the pipeline reports the tail" "$?" "0"
+
+( set -o pipefail 2>/dev/null ) || halt "this shell has no set -o pipefail"
+( set -o pipefail; false | tail -5 )
+eq "set -o pipefail restores it" "$?" "1"
+
+if ! command -v bash >/dev/null 2>&1; then
+  skip "PIPESTATUS claims" "bash is not installed"
+else
+  eq "PIPESTATUS[0] read immediately recovers the real status" \
+     "$(bash -c 'false | tail -5
+                 echo "${PIPESTATUS[0]}"')" "1"
+
+  # Any simple command in between resets it, and an assignment is one.
+  eq "one intervening command resets it to 0" \
+     "$(bash -c 'false | tail -5
+                 echo reading now >/dev/null
+                 echo "${PIPESTATUS[0]}"')" "0"
+
+  eq "even capturing \$? first resets it, which is the natural idiom" \
+     "$(bash -c 'false | tail -5
+                 st=$?
+                 echo "${PIPESTATUS[0]}"')" "0"
+fi
+
+# A suite whose failure scrolls past the tail.
+suite=$(mktemp -d) || halt "could not make a probe directory"
+keep "$suite"
+cat > "$suite/run" <<'FAKESUITE'
+#!/bin/sh
+echo "PASS spec/a"; echo "PASS spec/b"; echo "FAIL spec/c"
+echo "PASS spec/d"; echo "PASS spec/e"; echo "PASS spec/f"
+exit 1
+FAKESUITE
+chmod +x "$suite/run"
+
+"$suite/run" >/dev/null 2>&1
+eq "control: the suite itself exits 1" "$?" "1"
+
+eq "control: and prints its failure" \
+   "$("$suite/run" 2>/dev/null | grep -c '^FAIL' | tr -d ' ')" "1"
+
+tailed=$("$suite/run" 2>/dev/null | tail -3); rc=$?
+eq "piped through tail -3 it exits 0" "$rc" "0"
+
+eq "and nothing in what you see says FAIL" \
+   "$(printf '%s' "$tailed" | grep -c FAIL | tr -d ' ')" "0"
+
+eq "it reads as three clean specs" \
+   "$(printf '%s' "$tailed" | grep -c '^PASS' | tr -d ' ')" "3"
+
+# ---------------------------------------------------------------------------
+# An input that an earlier rule already rejects exercises nothing.
+#   mutation-test-guards, "The failure this prevents" — the two-rule parser.
+# ---------------------------------------------------------------------------
+echo
+echo "deleting the second of two refusals"
+
+# Rule A rejects anything containing a colon. Rule B rejects a bare 17-20 digit
+# id. $2 switches rule B on or off, which is the mutation.
+extract() {
+  case "$1" in *:*) echo null; return ;; esac
+  if [ "$2" = on ]; then
+    case "$1" in
+      ''|*[!0-9]*) : ;;
+      *) len=${#1}
+         if [ "$len" -ge 17 ] && [ "$len" -le 20 ]; then echo null; return; fi ;;
+    esac
+  fi
+  echo "${1##*/}"
+}
+
+url='https://example.com/channels/956003357129700000'
+bare='956003357129700000'
+
+eq "control: with rule B present the bare id is refused" \
+   "$(extract "$bare" on)" "null"
+
+eq "deleting rule B leaves the full URL unchanged" \
+   "$(printf '%s/%s' "$(extract "$url" on)" "$(extract "$url" off)")" "null/null"
+
+eq "and leaves the trimmed form unchanged" \
+   "$(printf '%s/%s' "$(extract channels on)" "$(extract channels off)")" "channels/channels"
+
+eq "only the bare id moves, which is the one input nobody writes a test from" \
+   "$(printf '%s/%s' "$(extract "$bare" on)" "$(extract "$bare" off)")" "null/$bare"
+
+# ---------------------------------------------------------------------------
+# An absence assertion that can never fire.
+#   mutation-test-guards, "A test asserting an absence".
+# ---------------------------------------------------------------------------
+echo
+echo "asserting the absence of something you cannot match"
+
+printf 'all fine\n' > "$suite/log"
+eq "the typo'd pattern finds nothing while nothing is there" \
+   "$(grep -c FORBIDEN "$suite/log" | tr -d ' ')" "0"
+
+printf 'all fine\nFORBIDDEN happened\n' > "$suite/log"
+eq "and still finds nothing once the thing appears" \
+   "$(grep -c FORBIDEN "$suite/log" | tr -d ' ')" "0"
+
+eq "control: the correct pattern does find it" \
+   "$(grep -c FORBIDDEN "$suite/log" | tr -d ' ')" "1"
+
+# ---------------------------------------------------------------------------
+# Deriving the old version, and replacing it without eating its neighbours.
+#   sync-version, steps 2 and 5.
+# ---------------------------------------------------------------------------
+echo
+echo "a version pattern that silently returns nothing"
+
+sv=$(mktemp -d) || halt "could not make a fixture directory"
+keep "$sv"
+
+if ! printf 'x\n' | grep -qP 'x' 2>/dev/null; then
+  skip "version pattern claims" "this grep has no -P"
+else
+  eq "control: a prerelease-shaped pattern finds a prerelease" \
+     "$(printf '1.2.3-alpha\n' | grep -oP '\d+\.\d+\.\d+-\w+')" "1.2.3-alpha"
+
+  eq "and returns nothing at all for a plain version" \
+     "$(printf '1.2.3\n' | grep -oP '\d+\.\d+\.\d+-\w+' | wc -c | tr -d ' ')" "0"
+fi
+
+# What an empty OLD then does to the two commands downstream of it.
+printf 'anything at all\n' > "$sv/any"
+grep -qF "" "$sv/any"
+eq "an empty -F pattern matches every file, so a guard in front passes" "$?" "0"
+
+msg=$(sed -i "s||X|g" "$sv/any" 2>&1); rc=$?
+eq "while sed refuses the empty pattern outright" "$rc" "1"
+eq "saying it has no previous regular expression" \
+   "$(printf '%s' "$msg" | grep -c 'no previous regular expression' | tr -d ' ')" "1"
+
+echo
+echo "replacing 0.4.2 with 0.5.0"
+
+printf 'current: 0.4.2\nCDN: lib@0.4.20-alpha\nolder: 0.4.21\n' > "$sv/v"
+sed -i "s|0.4.2|0.5.0|g" "$sv/v"
+
+eq "an unanchored sed gets the plain one right" \
+   "$(sed -n 1p "$sv/v")" "current: 0.5.0"
+eq "corrupts the longer prerelease" \
+   "$(sed -n 2p "$sv/v")" "CDN: lib@0.5.00-alpha"
+eq "and corrupts the longer patch" \
+   "$(sed -n 3p "$sv/v")" "older: 0.5.01"
+
+if ! printf 'x\n' | grep -qP 'x' 2>/dev/null; then
+  skip "anchoring claims" "this grep has no -P"
+else
+  eq "a word boundary refuses the longer version, correctly" \
+     "$(printf '0.4.20\n' | grep -cP '\b0\.4\.2\b' | tr -d ' ')" "0"
+  eq "but refuses a v-prefixed version too, which is the problem" \
+     "$(printf 'v0.4.2\n' | grep -cP '\b0\.4\.2\b' | tr -d ' ')" "0"
+  eq "control: it does match the bare version" \
+     "$(printf '0.4.2\n' | grep -cP '\b0\.4\.2\b' | tr -d ' ')" "1"
+
+  eq "a flat (?![0-9.]) matches the bare version" \
+     "$(printf '0.4.2\n' | grep -cP '(?<![0-9.])0\.4\.2(?![0-9.])' | tr -d ' ')" "1"
+  eq "and refuses a tag inside a tarball URL, where versions live" \
+     "$(printf 'archive/refs/tags/v0.4.2.tar.gz\n' | grep -cP '(?<![0-9.])0\.4\.2(?![0-9.])' | tr -d ' ')" "0"
+fi
+
+if ! command -v perl >/dev/null 2>&1; then
+  skip "the recommended replacement form" "perl is not installed"
+else
+  verdicts=''
+  for case_ in '0.4.2' '0.4.2-alpha' 'v0.4.2,' 'lib@0.4.2/x' \
+               'archive/refs/tags/v0.4.2.tar.gz' \
+               '0.4.20' '0.4.21' '10.4.2' 'v0.4.20'; do
+    got=$(printf '%s' "$case_" | perl -pe 's/(?<![0-9.])\Q0.4.2\E(?!\d)(?!\.\d)/0.5.0/g')
+    if [ "$got" = "$case_" ]; then verdicts="$verdicts-"; else verdicts="$verdicts+"; fi
+  done
+  eq "the perl form replaces the first five cases and leaves the last four" \
+     "$verdicts" "+++++----"
+
+  # Scoping the edit to one line: a claim above a table of history.
+  printf '# Roadmap\n\n> **Current version:** 0.4.2\n\n| 0.4.2 | shipped |\n| 0.4.1 | shipped |\n' \
+    > "$sv/ROADMAP.md"
+  perl -i -pe 's/(?<![0-9.])\Q0.4.2\E(?!\d)(?!\.\d)/0.5.0/g if /^> \*\*Current version:\*\*/' \
+    "$sv/ROADMAP.md"
+
+  eq "the header is updated" \
+     "$(grep -c '^> \*\*Current version:\*\* 0\.5\.0$' "$sv/ROADMAP.md" | tr -d ' ')" "1"
+  eq "and the shipped-releases rows keep their numbers" \
+     "$(grep -c '^| 0\.4\.' "$sv/ROADMAP.md" | tr -d ' ')" "2"
+fi
+
+# ---------------------------------------------------------------------------
+# "The change" answers about wherever you are standing, unless you name refs.
+#   triage-test-failures, "Name what you are comparing against"; the same
+#   measurement is what sync-version step 6 turns on.
+# ---------------------------------------------------------------------------
+echo
+echo "one change, two diff forms, three states"
+
+git init -q --bare "$sv/origin.git" || halt "git init --bare failed"
+git init -q -b main "$sv/w"         || halt "git init failed"
+cd "$sv/w"                          || halt "could not enter the fixture"
+git config user.email checks@example.invalid
+git config user.name  checks
+mkdir src
+echo committed > src/a.txt
+git add src/a.txt; git commit -q -m init
+git remote add origin "$sv/origin.git"
+git push -q -u origin main || halt "push to the fixture remote failed"
+
+echo modified  > src/a.txt
+echo brand-new > src/new.txt
+
+eq "uncommitted: the bare form sees it, the ref form does not" \
+   "$(printf '%s/%s' "$([ -n "$(git diff --stat)" ] && echo sees || echo empty)" \
+                     "$([ -n "$(git diff origin/main...HEAD)" ] && echo sees || echo empty)")" \
+   "sees/empty"
+
+# A detached baseline worktree, which is what this skill uses instead of stash.
+base="$sv/base"
+git worktree add -q --detach "$base" HEAD || halt "detached worktree add failed"
+
+eq "the baseline holds the committed file, not your edit" \
+   "$(cat "$base/src/a.txt")" "committed"
+
+eq "and does not hold your untracked file" \
+   "$([ -e "$base/src/new.txt" ] && echo present || echo absent)" "absent"
+
+eq "control: your own tree still reports both" \
+   "$(git status --porcelain -uall | wc -l | tr -d ' ')" "2"
+
+git add -A && git commit -q -m change
+
+eq "after committing: the bare form goes silent, the ref form answers" \
+   "$(printf '%s/%s' "$([ -n "$(git diff --stat)" ] && echo sees || echo empty)" \
+                     "$([ -n "$(git diff origin/main...HEAD)" ] && echo sees || echo empty)")" \
+   "empty/sees"
+
+git worktree add -q -b side "$sv/side" >/dev/null 2>&1 \
+  || halt "git worktree add failed"
+
+eq "from another worktree: the same, which is how a re-check reads agreement" \
+   "$(printf '%s/%s' "$([ -n "$(git -C "$sv/side" diff --stat)" ] && echo sees || echo empty)" \
+                     "$([ -n "$(git -C "$sv/side" diff origin/main...main)" ] && echo sees || echo empty)")" \
+   "empty/sees"
+
+# ---------------------------------------------------------------------------
+# A plain grep over a diff counts context as though it were changed.
+#   triage-test-failures, same section.
+# ---------------------------------------------------------------------------
+echo
+echo "counting changed lines in a diff"
+
+git checkout -q -b work
+printf 'LINE one\nTARGET untouched\nLINE three\n' > f
+git add f; git commit -q -m seed
+git push -q -u origin work >/dev/null 2>&1 || halt "push of the work branch failed"
+
+# An entry inserted directly above a line nobody touched.
+printf 'LINE one\nINSERTED above\nTARGET untouched\nLINE three\n' > f
+git add f; git commit -q -m insert
+
+eq "a bare grep -c counts the untouched line as touched" \
+   "$(git diff origin/work...HEAD -- f | grep -c TARGET | tr -d ' ')" "1"
+
+eq "-U0 with a [^+-] guard reports it correctly as untouched" \
+   "$(git diff -U0 origin/work...HEAD -- f | grep -E '^[+-][^+-]' | grep -c TARGET | tr -d ' ')" "0"
+
+printf 'LINE one\nINSERTED above\nTARGET EDITED\nLINE three\n' > f
+git add f; git commit -q -m edit
+
+eq "control: and answers 2 when the line really is edited, one - and one +" \
+   "$(git diff -U0 origin/work...HEAD -- f | grep -E '^[+-][^+-]' | grep -c TARGET | tr -d ' ')" "2"
+
+cd / || exit 1
+
+# ---------------------------------------------------------------------------
+# Comparing failure sets rather than counts.
+#   triage-test-failures, "Compare sets, never counts".
+# ---------------------------------------------------------------------------
+echo
+echo "the three comm columns"
+
+printf 'spec_a\nspec_b\nspec_c\n' > "$sv/baseline"
+printf 'spec_b\nspec_c\nspec_d\n' > "$sv/current"
+
+eq "comm -13 gives what fails only with your diff" \
+   "$(comm -13 "$sv/baseline" "$sv/current" | tr '\n' ' ' | sed 's/ $//')" "spec_d"
+
+eq "comm -12 gives what fails in both runs" \
+   "$(comm -12 "$sv/baseline" "$sv/current" | tr '\n' ' ' | sed 's/ $//')" "spec_b spec_c"
+
+eq "comm -23 gives what your diff fixed, the column nobody reads" \
+   "$(comm -23 "$sv/baseline" "$sv/current" | tr '\n' ' ' | sed 's/ $//')" "spec_a"
+
+eq "control: equal counts are not the same set" \
+   "$(printf '%s/%s' "$(wc -l < "$sv/baseline" | tr -d ' ')" "$(wc -l < "$sv/current" | tr -d ' ')")" "3/3"
+
+# ---------------------------------------------------------------------------
+# A test count grepped from a human summary, and the two guards in front of it.
+#   resolve-npm-deprecations, step 5.
+# ---------------------------------------------------------------------------
+echo
+echo "taking a test count from printed output"
+
+eq "the obvious pattern reads jest's summary" \
+   "$(printf 'Tests:       3649 passed, 3649 total\n' | grep -oE '[0-9]+ passed')" \
+   "3649 passed"
+
+eq "and yields nothing for node --test" \
+   "$(printf '# pass 3649\n' | grep -oE '[0-9]+ passed' | wc -c | tr -d ' ')" "0"
+
+eq "and nothing for mocha, so both sides can measure nothing" \
+   "$(printf '3649 passing (2s)\n' | grep -oE '[0-9]+ passed' | wc -c | tr -d ' ')" "0"
+
+echo
+echo "comparing the counts once you have them"
+
+if [ 1000 \< 900 ]; then r=true; else r=false; fi
+eq "a string comparison calls 1000 < 900 true" "$r" "true"
+
+if [ 1000 -lt 900 ]; then r=true; else r=false; fi
+eq "control: the numeric comparison does not" "$r" "false"
+
+if ! command -v bash >/dev/null 2>&1; then
+  skip "the empty-value coercion" "bash is not installed"
+else
+  eq "an empty count coerces to 0 and reports a regression from nothing" \
+     "$(bash -c 'AFTER=""; BEFORE=3649; if (( AFTER < BEFORE )); then echo regression; else echo none; fi')" \
+     "regression"
+fi
+
+for probe in "36493649 accepted" " refused" "36x9 refused"; do
+  val=${probe% *}; want=${probe#* }
+  case "$val" in ''|*[!0-9]*) got=refused ;; *) got=accepted ;; esac
+  eq "the numeric guard: [$val] is $want" "$got" "$want"
+done
+
 echo
 [ "$skips" -gt 0 ] && printf '%s claims skipped for want of an optional tool\n' "$skips"
 if [ "$fails" -eq 0 ]; then

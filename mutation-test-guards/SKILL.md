@@ -112,11 +112,21 @@ exactly like a clean run, because the failure scrolled past:
     (exit seen by caller: 0)
 
 **Read the exit code of the command itself**, not of a pipeline ending in
-`tail`, `head`, `grep` or a formatter. In bash, `${PIPESTATUS[0]}` recovers it;
-`set -o pipefail` makes the pipeline report it. This is the same failure as
-summarising away the value you measured — the evidence was produced and the
-presentation discarded it, which is why re-reading the command shows nothing
-wrong.
+`tail`, `head`, `grep` or a formatter. `set -o pipefail` makes the pipeline
+report it, and in bash `${PIPESTATUS[0]}` recovers it — **but only as the very
+next thing.** Any simple command in between resets the array, and a bare
+assignment is a simple command, so the obvious idiom reads 0:
+
+    false | tail -5; echo "${PIPESTATUS[0]}"         -> 1   correct
+    false | tail -5; st=$?; echo "${PIPESTATUS[0]}"  -> 0   the capture reset it
+
+The second line is what you write when you want both numbers, which makes
+`PIPESTATUS` the more fragile of the two — and it fails toward green. Prefer
+`pipefail` where the shell has it.
+
+This is the same failure as summarising away the value you measured — the
+evidence was produced and the presentation discarded it, which is why re-reading
+the command shows nothing wrong.
 
 ## What counts as a guard
 
