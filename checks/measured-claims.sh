@@ -480,9 +480,14 @@ eq "false exits 1" "$?" "1"
 false | tail -5
 eq "false | tail -5 exits 0 — the pipeline reports the tail" "$?" "0"
 
-( set -o pipefail 2>/dev/null ) || halt "this shell has no set -o pipefail"
-( set -o pipefail; false | tail -5 )
-eq "set -o pipefail restores it" "$?" "1"
+# pipefail is not POSIX. The dash on GitHub's ubuntu-latest runners does not
+# have it, so this is a skip rather than a verdict about the claim.
+if ! ( set -o pipefail ) 2>/dev/null; then
+  skip "set -o pipefail restores it" "this shell has no set -o pipefail"
+else
+  ( set -o pipefail; false | tail -5 )
+  eq "set -o pipefail restores it" "$?" "1"
+fi
 
 if ! command -v bash >/dev/null 2>&1; then
   skip "PIPESTATUS claims" "bash is not installed"
@@ -1025,7 +1030,7 @@ EXTRACT
 fi
 
 echo
-[ "$skips" -gt 0 ] && printf '%s claims skipped for want of an optional tool\n' "$skips"
+[ "$skips" -gt 0 ] && printf '%s claims skipped for want of an optional tool or shell feature\n' "$skips"
 if [ "$fails" -eq 0 ]; then
   printf '%s claims re-measured, all hold\n' "$checked"
   exit 0

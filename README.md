@@ -171,6 +171,11 @@ written:
   pipe only when read as the very next thing; one intervening command resets the
   array, and `st=$?` is one. Following the skill as written produced the false
   green the skill is about.
+- `mutation-test-guards`, again, and this one was found by CI on its first run.
+  `set -o pipefail` is not POSIX: GitHub's `ubuntu-latest` has an older `/bin/sh`
+  that rejects it, while a current dash, bash and zsh all accept it. A workflow
+  step running under `sh` therefore has neither `pipefail` nor `PIPESTATUS`, so
+  the skill now gives the form that needs no pipe at all.
 - `sync-version`, `triage-test-failures` and `resolve-npm-deprecations` needed
   no correction. All nine anchoring cases, the six-cell diff table, the
   `1`/`0`/`2` diff-grep counts and the three-runner summary patterns reproduced

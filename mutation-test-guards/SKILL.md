@@ -121,8 +121,16 @@ assignment is a simple command, so the obvious idiom reads 0:
     false | tail -5; st=$?; echo "${PIPESTATUS[0]}"  -> 0   the capture reset it
 
 The second line is what you write when you want both numbers, which makes
-`PIPESTATUS` the more fragile of the two — and it fails toward green. Prefer
-`pipefail` where the shell has it.
+`PIPESTATUS` the more fragile of the two — and it fails toward green.
+
+**And `pipefail` is not POSIX, so a CI step running under `sh` may not have it.**
+Measured on GitHub's `ubuntu-latest`, whose `/bin/sh` is an older dash:
+`set -o pipefail` is rejected, while a current dash, bash and zsh all accept it.
+So in a workflow step the choice is to say `shell: bash` deliberately, or to
+capture the status without a pipe at all:
+
+    out=$(<the suite>); st=$?        # no pipe, so nothing to lose
+    printf '%s\n' "$out" | tail -5  # summarise after you have the number
 
 This is the same failure as summarising away the value you measured — the
 evidence was produced and the presentation discarded it, which is why re-reading
