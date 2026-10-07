@@ -111,8 +111,8 @@ Two of them, neither testing the prose:
   parses, `name` matching the directory, a description that exists and fits,
   code fences that close.
 - [`checks/measured-claims.sh`](checks/measured-claims.sh) — rebuilds the
-  situations the skills quote and re-asserts the numbers they print. **115 of
-  them**, over seven skills.
+  situations the skills quote and re-asserts the numbers they print. **135 of
+  them**, over ten skills.
 
 The second one is the point. Those claims are about git, procps, perl and the
 shell, not about this repository, so they can stop being true without anything
@@ -135,6 +135,10 @@ What is covered, and the measurement each section turns on:
 | `sync-version` | an unanchored replacement eating longer versions that share a prefix, and the four anchoring forms that get it wrong before the one that does not |
 | `triage-test-failures` | one change seen through two diff forms in three states; a `grep -c` over a diff counting context as changed |
 | `resolve-npm-deprecations` | a count grepped from a human summary yielding nothing for two of three runners, and the two guards in front of comparing it |
+| `verify-deploy-landed` | a converting fetch path dropping the marker while the text it drives still renders; the cache headers that say you are reading the edge |
+| `verify-pasted-url` | a lenient host answering `200` for an invented id exactly as for a real one, against a strict one that does not |
+| `update-url-dependency` | one release written two ways, and an early-exit guard reading one location of several |
+| `verify-workflow-shell` | `git merge-base --is-ancestor X X` being true, so an ancestor guard refuses the redeploy it was asked for |
 
 Positive controls throughout, for one reason: a probe that cannot see a branch
 which *is* on the remote proves nothing by failing to see one that is not. They
@@ -174,18 +178,32 @@ written:
 
 ### Not covered
 
-`verify-deploy-landed`, `verify-pasted-url` and `update-url-dependency` rest on
-how real hosts answer — a `200` for an identifier that does not exist, a
-converting fetch path dropping HTML attributes. Those cannot be rebuilt from a
-fixture without standing up the thing being described, and asserting them means
-sending traffic to third parties on every run, so they are not asserted here.
-`import-adapt-guides` and `verify-workflow-shell` carry no quoted measurement to
-re-check.
+The three fetch-based skills are now asserted against a server the check starts
+on loopback, which is not third-party traffic and needs no network. What is
+*not* asserted is the part that belongs to particular hosts: the byte counts in
+`verify-pasted-url` are measurements of YouTube and Discord, and re-checking
+them would mean sending traffic to them on every run. So the mechanism is
+asserted and the host-specific numbers are not — a probe that cannot
+discriminate a real id from an invented one is rebuilt here, while the specific
+`200 / 63681 B` against `200 / 63657 B` stays a recorded observation.
+
+`import-adapt-guides` is the only skill with nothing to re-check: it quotes no
+measurement.
+
+The other gap is behavioural. Nothing here checks whether a skill *triggers* on
+the right request, or whether an agent following it reaches the right verdict.
+That needs evals, not assertions.
+
+They run in CI on every push and pull request
+([`.github/workflows/checks.yml`](.github/workflows/checks.yml)), because a
+check nobody runs guards nothing.
 
 Everything these scripts strictly need is `git`, `pgrep` and a POSIX shell.
-Claims that need `ss`, `python3`, `perl`, `bash` or `gh` are skipped rather than
-failed when those are absent. There is no package manager in this repository and
-nothing to install.
+Claims that need `ss`, `curl`, `lynx`, `python3`, PyYAML, `perl`, `bash` or an
+authenticated `gh` are skipped rather than failed when those are absent — `gh`
+validates auth before it validates a `--json` field name, so an unauthenticated
+run would otherwise fail that check for the wrong reason. There is no package
+manager in this repository and nothing to install.
 
 ## Conventions
 

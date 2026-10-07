@@ -1,0 +1,19 @@
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the checks
+        env:
+          # gh validates auth before it validates a --json field name, so the
+          # field-name check skips itself without a token rather than failing.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sh checks/run

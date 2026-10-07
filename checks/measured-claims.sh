@@ -21,6 +21,10 @@ eq()   { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 — expected [$3], got [
 skip() { skips=$((skips+1)); printf '  skip  %s — %s\n' "$1" "$2"; }
 halt() { printf '  CANNOT DETERMINE  %s\n' "$1"; exit 2; }
 
+# The repository root, for the one claim that reads a committed file. Overridable
+# so a mutated copy of this script can be pointed at a mutated tree.
+root=${CHECKS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
+
 sweep() { rm -rf $junk; }
 trap sweep EXIT INT TERM
 keep()  { junk="$junk $1"; }
@@ -273,6 +277,10 @@ echo "the documented gh field"
 
 if ! command -v gh >/dev/null 2>&1; then
   skip "gh repo view field name" "gh is not installed"
+elif ! gh auth status >/dev/null 2>&1; then
+  # gh checks auth before it validates the field name, so an unauthenticated
+  # run reports nothing and would fail this for the wrong reason.
+  skip "gh repo view field name" "gh is not authenticated"
 else
   # An unknown field makes gh print the valid ones. No network, no auth.
   eq "deleteBranchOnMerge is still a gh repo view --json field" \
@@ -805,6 +813,216 @@ for probe in "36493649 accepted" " refused" "36x9 refused"; do
   case "$val" in ''|*[!0-9]*) got=refused ;; *) got=accepted ;; esac
   eq "the numeric guard: [$val] is $want" "$got" "$want"
 done
+
+# ---------------------------------------------------------------------------
+# How a host answers, rebuilt on loopback.
+#   verify-deploy-landed (a converting fetch path, cache headers) and
+#   verify-pasted-url (a probe without a control case). The skills' own numbers
+#   belong to third-party hosts and are not re-measured here; what is asserted
+#   is the mechanism, against a server this check starts itself.
+# ---------------------------------------------------------------------------
+echo
+echo "probing a server on loopback"
+
+if ! command -v curl >/dev/null 2>&1; then
+  skip "loopback probe claims" "curl is not installed"
+elif ! command -v python3 >/dev/null 2>&1; then
+  skip "loopback probe claims" "python3 is not installed, and the fixture is a server"
+else
+  http=$(mktemp -d) || halt "could not make a fixture directory"
+  keep "$http"
+  cat > "$http/server.py" <<'PYSERVER'
+import sys, time
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+# A marker carried only in attributes, beside the visible text it drives.
+PAGE = (b'<!doctype html><html><body>'
+        b'<form action="/submit-ZMARK"><input data-fs-success="ZMARK"></form>'
+        b'<p>Your changes were saved.</p>'
+        b'</body></html>')
+CSS = b'.banner { content: "ZMARK"; }\n'
+
+class H(BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def _send(self, code, body, extra=()):
+        self.send_response(code)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.send_header('Content-Length', str(len(body)))
+        for k, v in extra: self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(body)
+    def do_GET(self):
+        p = self.path
+        if   p == '/loose/real':      self._send(200, b'x' * 4000)
+        elif p == '/loose/invented':  self._send(200, b'x' * 1200)
+        elif p == '/strict/real':     self._send(200, b'{"title":"real"}')
+        elif p == '/strict/invented': self._send(400, b'Bad Request')
+        elif p == '/cached':          self._send(200, b'body',
+                                          (('Age', '42'), ('X-Cache', 'HIT'), ('ETag', '"v2"')))
+        elif p == '/fresh':           self._send(200, b'body')
+        elif p == '/page.html':       self._send(200, PAGE)
+        elif p == '/asset.css':       self._send(200, CSS)
+        else:                         self._send(404, b'nope')
+
+srv = HTTPServer(('127.0.0.1', 0), H)
+print(srv.server_address[1], flush=True)
+srv.timeout = 1
+deadline = time.time() + int(sys.argv[1])
+while time.time() < deadline:
+    srv.handle_request()
+PYSERVER
+  python3 "$http/server.py" 30 > "$http/port" 2>/dev/null & httppid=$!
+  sleep 2
+  port=''
+  read -r port < "$http/port" 2>/dev/null || true
+
+  if [ -z "$port" ]; then
+    skip "loopback probe claims" "the fixture server did not come up"
+  else
+    base="http://127.0.0.1:$port"
+    probe() { curl -s -o /dev/null -w '%{http_code} %{size_download}B' --max-time 5 "$1"; }
+
+    # A host that answers 200 for an identifier that does not exist.
+    eq "a lenient host answers 200 for an invented id, same as a real one" \
+       "$(printf '%s|%s' "$(probe "$base/loose/real" | cut -d' ' -f1)" \
+                         "$(probe "$base/loose/invented" | cut -d' ' -f1)")" "200|200"
+
+    eq "so the status alone cannot discriminate, though the sizes differ" \
+       "$([ "$(probe "$base/loose/real" | cut -d' ' -f2)" \
+            != "$(probe "$base/loose/invented" | cut -d' ' -f2)" ] && echo differ || echo same)" "differ"
+
+    eq "control: a strict endpoint does discriminate" \
+       "$(printf '%s|%s' "$(probe "$base/strict/real" | cut -d' ' -f1)" \
+                         "$(probe "$base/strict/invented" | cut -d' ' -f1)")" "200|400"
+
+    eq "control: and a genuinely absent path is a 404" \
+       "$(probe "$base/no-such-path" | cut -d' ' -f1)" "404"
+
+    # The cache headers the skill tells you to read.
+    eq "the documented header grep finds Age, X-Cache and ETag" \
+       "$(curl -fsS -H 'Cache-Control: no-cache' "$base/cached" -o /dev/null -D - 2>/dev/null \
+          | grep -icE '^(age|x-cache|cf-cache-status|etag):' | tr -d ' ')" "3"
+
+    eq "control: and finds nothing on a response carrying none" \
+       "$(curl -fsS "$base/fresh" -o /dev/null -D - 2>/dev/null \
+          | grep -icE '^(age|x-cache|cf-cache-status|etag):' | tr -d ' ')" "0"
+
+    # A converting fetch path, which is what a reader mode or scraper does.
+    eq "control: the marker really is in the raw response" \
+       "$(curl -fsS "$base/page.html" 2>/dev/null | grep -c ZMARK | tr -d ' ')" "1"
+
+    if ! command -v lynx >/dev/null 2>&1; then
+      skip "the converting fetch path" "lynx is not installed"
+    else
+      eq "a converting fetch drops it, so the probe reports a deploy that landed" \
+         "$(lynx -dump "$base/page.html" 2>/dev/null | grep -c ZMARK | tr -d ' ')" "0"
+
+      eq "while the visible text it drives still renders — the ambiguity" \
+         "$(lynx -dump "$base/page.html" 2>/dev/null | grep -c 'changes were saved' | tr -d ' ')" "1"
+
+      eq "a plain-text asset survives the same round trip, which is why to prefer one" \
+         "$(lynx -dump "$base/asset.css" 2>/dev/null | grep -c ZMARK | tr -d ' ')" "1"
+    fi
+  fi
+  kill "$httppid" 2>/dev/null
+  wait "$httppid" 2>/dev/null
+fi
+
+# ---------------------------------------------------------------------------
+# Two forms of one version, and a guard that reads one of seven locations.
+#   update-url-dependency, steps 2 and 3.
+# ---------------------------------------------------------------------------
+echo
+echo "the same release written two ways"
+
+TAGFORM="v0.13.1-alpha"
+eq "stripping the v gives the bare semver jsDelivr writes" "${TAGFORM#v}" "0.13.1-alpha"
+
+uu=$(mktemp -d) || halt "could not make a fixture directory"
+keep "$uu"
+
+# Replacing the tag form misses the CDN import.
+printf 'tag: v0.13.1-alpha\ncdn: lib@0.13.1-alpha/x.js\n' > "$uu/f"
+sed -i "s|v0.13.1-alpha|v0.14.0|g" "$uu/f"
+eq "replacing the tag form leaves the CDN import behind" \
+   "$(grep -c '0\.13\.1-alpha' "$uu/f" | tr -d ' ')" "1"
+
+# Replacing the bare form with the tag form corrupts the tag.
+printf 'tag: v0.13.1-alpha\ncdn: lib@0.13.1-alpha/x.js\n' > "$uu/f"
+sed -i "s|0.13.1-alpha|v0.14.0|g" "$uu/f"
+eq "and replacing the bare form with the tag form yields vv" \
+   "$(grep -c 'vv0\.14\.0' "$uu/f" | tr -d ' ')" "1"
+
+echo
+echo "an early-exit guard reading one location of several"
+
+git init -q -b main "$uu/repo" || halt "git init failed"
+cd "$uu/repo"                  || halt "could not enter the fixture"
+git config user.email checks@example.invalid
+git config user.name  checks
+# A half-finished update: the manifest is current, a second location is not.
+printf '{"dep":"0.14.0"}\n'          > manifest.json
+printf 'cdn: lib@0.13.1-alpha/x.js\n' > README.md
+git add -A && git commit -q -m seed
+
+eq "a guard reading only the manifest reports already up to date" \
+   "$(grep -c '0\.14\.0' manifest.json | tr -d ' ')" "1"
+
+eq "while a second location still carries the old version" \
+   "$(grep -c '0\.13\.1-alpha' README.md | tr -d ' ')" "1"
+
+eq "the disagreement check over the whole inventory finds two versions" \
+   "$(git grep -ohE 'v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?' -- manifest.json README.md \
+      | sed -E 's/^v//; s/(\.(tar|tgz|zip|gz))+$//' | sort -u | wc -l | tr -d ' ')" "2"
+
+cd / || exit 1
+
+# ---------------------------------------------------------------------------
+# Workflow shell, and the guard that refuses the commit it is asked to redeploy.
+#   verify-workflow-shell, "What this actually catches".
+# ---------------------------------------------------------------------------
+echo
+echo "a deploy guard built on is-ancestor"
+
+wf=$(mktemp -d) || halt "could not make a fixture directory"
+keep "$wf"
+git init -q -b main "$wf/r" || halt "git init failed"
+cd "$wf/r"                  || halt "could not enter the fixture"
+git config user.email checks@example.invalid
+git config user.name  checks
+git commit -q --allow-empty -m one; live=$(git rev-parse HEAD)
+git commit -q --allow-empty -m two; ahead=$(git rev-parse HEAD)
+
+git merge-base --is-ancestor "$live" "$live"
+eq "is-ancestor X X is true, so a guard refusing ancestors refuses a redeploy" "$?" "0"
+
+git merge-base --is-ancestor "$live" "$ahead"
+eq "control: an older commit is an ancestor of a newer one" "$?" "0"
+
+git merge-base --is-ancestor "$ahead" "$live"
+eq "control: and a newer commit is not an ancestor of an older one" "$?" "1"
+
+cd / || exit 1
+
+# The extraction this skill insists on: the bytes under test come out of the
+# committed YAML rather than a retyped copy. Run against this repository's own
+# workflow, so renaming the script in one place and not the other is caught.
+if ! command -v python3 >/dev/null 2>&1; then
+  skip "the workflow extraction" "python3 is not installed"
+elif ! python3 -c 'import yaml' 2>/dev/null; then
+  skip "the workflow extraction" "PyYAML is not installed"
+elif [ ! -f "$root/.github/workflows/checks.yml" ]; then
+  skip "the workflow extraction" "no workflow file to extract from"
+else
+  eq "the shipped run: block is what invokes the checks" \
+     "$(python3 - "$root/.github/workflows/checks.yml" <<'EXTRACT'
+import io, sys, yaml
+d = yaml.safe_load(io.open(sys.argv[1], encoding='utf-8'))
+step = [x for x in d['jobs']['checks']['steps'] if 'run' in x][0]
+print('yes' if 'checks/run' in step['run'] else 'no')
+EXTRACT
+)" "yes"
+fi
 
 echo
 [ "$skips" -gt 0 ] && printf '%s claims skipped for want of an optional tool\n' "$skips"
