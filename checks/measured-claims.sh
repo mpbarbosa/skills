@@ -1023,8 +1023,14 @@ else
      "$(python3 - "$root/.github/workflows/checks.yml" <<'EXTRACT'
 import io, sys, yaml
 d = yaml.safe_load(io.open(sys.argv[1], encoding='utf-8'))
-step = [x for x in d['jobs']['checks']['steps'] if 'run' in x][0]
-print('yes' if 'checks/run' in step['run'] else 'no')
+# Select by name, as the skill's own example does. Taking the first step with
+# a run block instead broke the moment a setup step was added above it.
+named = [x for x in d['jobs']['checks']['steps']
+         if x.get('name', '') == 'Run the checks']
+if not named:
+    print('no step named "Run the checks"')
+else:
+    print('yes' if 'checks/run' in named[0].get('run', '') else 'no')
 EXTRACT
 )" "yes"
 fi

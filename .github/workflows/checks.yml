@@ -10,6 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install lynx
+        # A converting fetch path is what verify-deploy-landed's headline claim
+        # is about, and it is skipped rather than asserted without one.
+        run: sudo apt-get install -y --no-install-recommends lynx
       - name: Run the checks
         env:
           # gh validates auth before it validates a --json field name, so the
