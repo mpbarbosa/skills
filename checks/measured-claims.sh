@@ -1035,6 +1035,43 @@ EXTRACT
 )" "yes"
 fi
 
+# ---------------------------------------------------------------------------
+# A zero from a probe that never ran.
+#   mutation-test-guards, "You have to be able to see red".
+# ---------------------------------------------------------------------------
+echo
+echo "counting the output of a probe that failed"
+
+z=$(mktemp -d) || halt "could not make a fixture directory"
+keep "$z"
+
+cat > "$z/broken" <<'BROKEN'
+#!/bin/sh
+echo "Failed to authenticate: session expired" >&2
+exit 1
+BROKEN
+cat > "$z/working" <<'WORKING'
+#!/bin/sh
+echo "SomeOtherTool was called"
+exit 0
+WORKING
+chmod +x "$z/broken" "$z/working"
+
+eq "a probe that failed, with stderr discarded, counts 0" \
+   "$("$z/broken" 2>/dev/null | grep -c SkillCall | tr -d ' ')" "0"
+
+eq "a probe that worked and found nothing counts 0 as well" \
+   "$("$z/working" 2>/dev/null | grep -c SkillCall | tr -d ' ')" "0"
+
+"$z/broken" >/dev/null 2>&1
+eq "only the exit status separates them — the failed one" "$?" "1"
+
+"$z/working" >/dev/null 2>&1
+eq "and the one that ran" "$?" "0"
+
+eq "control: the count does find a match when there is one to find" \
+   "$("$z/working" 2>/dev/null | grep -c SomeOtherTool | tr -d ' ')" "1"
+
 echo
 [ "$skips" -gt 0 ] && printf '%s claims skipped for want of an optional tool or shell feature\n' "$skips"
 if [ "$fails" -eq 0 ]; then

@@ -171,6 +171,12 @@ written:
   pipe only when read as the very next thing; one intervening command resets the
   array, and `st=$?` is one. Following the skill as written produced the false
   green the skill is about.
+- `mutation-test-guards`, a third time, from trying to close the behavioural gap
+  below. A trigger-rate harness scored every query `0.0`, which reads as a
+  description that never fires; it was a subprocess failing to authenticate with
+  its `stderr` discarded and its exit status unchecked. A positive control
+  quoting a skill's own opening line scored `0.0` too, which is the only reason
+  that did not get written down as a finding about the descriptions.
 - `mutation-test-guards`, again, and this one was found by CI on its first run.
   `set -o pipefail` is not POSIX: GitHub's `ubuntu-latest` has an older `/bin/sh`
   that rejects it, while a current dash, bash and zsh all accept it. A workflow
@@ -198,6 +204,12 @@ measurement.
 The other gap is behavioural. Nothing here checks whether a skill *triggers* on
 the right request, or whether an agent following it reaches the right verdict.
 That needs evals, not assertions.
+[`checks/trigger-evals/`](checks/trigger-evals/) holds a labelled query set for
+the first half of that — one set of 14 queries labelled three ways, so running
+all three measures whether the overlapping session-* descriptions discriminate.
+It has never produced a measurement here, and its README says why: `claude -p`
+was unauthenticated, and the harness reports a failed run and a description that
+never fires as the same `0.0`.
 
 They run in CI on every push and pull request
 ([`.github/workflows/checks.yml`](.github/workflows/checks.yml)), because a

@@ -136,6 +136,23 @@ This is the same failure as summarising away the value you measured — the
 evidence was produced and the presentation discarded it, which is why re-reading
 the command shows nothing wrong.
 
+**And a zero from a probe that never ran looks exactly like a zero from a probe
+that found nothing.** This bit a run of this skill. A trigger-rate harness
+launched `claude -p` per query with `stderr` discarded and the exit status
+unchecked, then counted tool calls in the output. Every query scored `0.0`, which
+reads as *this description never triggers*. The subprocess had been failing to
+authenticate; no model ever ran. Measured, with the failure thrown away:
+
+    probe fails, stderr discarded, count the matches  -> 0
+    probe works, genuinely nothing to find           -> 0
+    the exit status of each                          -> 1  vs  0
+
+The zero is not the defect. Discarding the one signal that separates the two is.
+So **pair every count with its probe's exit status, and give the probe a case it
+must find.** A positive control is what turns an unobservable zero into a
+measurement: if the control scores zero as well, you have learned about your
+harness rather than about the thing you were testing.
+
 ## What counts as a guard
 
 Anything whose job is to not happen:

@@ -1,0 +1,58 @@
+[
+  {
+    "query": "about to shut my laptop for the day \u2014 anything in this session i'd lose if i just close the window?",
+    "should_trigger": false
+  },
+  {
+    "query": "can i close this or is something still running? i started a preview server earlier i think",
+    "should_trigger": false
+  },
+  {
+    "query": "quick check before i stop for the night: do i owe anyone anything out of this session",
+    "should_trigger": false
+  },
+  {
+    "query": "ok i'm done with this one. tidy up after yourself \u2014 drop the worktree and the branch you made",
+    "should_trigger": false
+  },
+  {
+    "query": "wrap this session up properly please, and release anything the other agents are waiting on first",
+    "should_trigger": false
+  },
+  {
+    "query": "kill the preview server you started and delete the fix-parser branch, i'm finished here",
+    "should_trigger": false
+  },
+  {
+    "query": "you said you cleaned everything up. did that actually work? anything of yours still hanging around?",
+    "should_trigger": true
+  },
+  {
+    "query": "double check nothing of yours is left on the machine after that teardown, i want to be sure before i kill the window",
+    "should_trigger": true
+  },
+  {
+    "query": "close the modal when the user presses escape \u2014 it's in src/components/Dialog.tsx and currently only closes on the X",
+    "should_trigger": false
+  },
+  {
+    "query": "the dev server on :3000 won't die, lsof shows nothing. how do i kill it for good?",
+    "should_trigger": false
+  },
+  {
+    "query": "what's actually left on the sprint board before we wrap up the 0.9 release?",
+    "should_trigger": false
+  },
+  {
+    "query": "is it safe to stop the postgres container while a migration is halfway through?",
+    "should_trigger": false
+  },
+  {
+    "query": "delete the merged branches on origin, there are about 40 of them from last quarter",
+    "should_trigger": false
+  },
+  {
+    "query": "did the deploy actually land? the pipeline went green but the page still shows the old copy",
+    "should_trigger": false
+  }
+]
