@@ -5,7 +5,9 @@ A record of which skills in the sibling repositories under
 sweep **re-confirms rather than re-litigates**. Skips are as much a result as
 imports; an undocumented skip gets reassessed from scratch every time.
 
-Last surveyed: **2026-09-28**.
+Last surveyed: **2026-10-13** — the three repositories named in that
+sweep's "not yet assessed" list plus `trilhas_estudos`, which the earlier counts
+had missed entirely.
 
 ---
 
@@ -29,6 +31,11 @@ find . -maxdepth 6 -name SKILL.md \
 | …of those, a **vendored third-party collection** (see below) | 29 |
 | **Names assessed so far** | **75** |
 | **Names not yet read in full — and yours** | **11** |
+
+Re-measured on 2026-10-13 with the same command: **168** files, **97** distinct
+names, **31** repositories. The table above is the 2026-09-28 snapshot and is
+kept as written; see the hole in the exclusion list recorded in the
+2026-10-13 sweep below before trusting either set of figures.
 
 Four container conventions are in use: `.claude/skills/`, `.github/skills/`,
 `.agents/skills/`, `.opencode/skills/`.
@@ -64,6 +71,8 @@ the imported set and the vendored set, or the same inflation returns.
 | `verify-pasted-url` | distilled from **4** `place-*` skills | the verification half; see below |
 | `mutation-test-guards` | distilled from `place-external-link` | the guard-proving half |
 | `resolve-npm-deprecations` | `guia_js/.github/skills/validate-node-modules` | renamed; **npm-specific** |
+| `commit-in-shared-checkout` | distilled from `trilhas_estudos` `encerrar-branch` | sections 5–7 of it; the rest was already here |
+| `enumerate-a-batch` | distilled from `linkedin` `triagem-n8n` | the enumeration discipline; the pipeline stayed behind |
 
 ### Choosing among diverged copies
 
@@ -111,6 +120,13 @@ carry one transferable idea — verify a pasted URL against the live source
 before filing it, never trusting the search label — which is noted here rather
 than imported, since the routing tables around it are the bulk of the skill.
 
+### Bound to one catalogue schema (1)
+
+`autorar-catalogo` (trilhas_estudos) — a YAML schema, 11 numbered validations,
+a `rev` table and four directory conventions. Its value is the paths and the
+schema. Read in full on 2026-10-13; see the sweep section below for the two
+habits noted but not imported.
+
 ### Not your work — a vendored third-party collection (29)
 
 `mpbarbosa.com`'s skills directory is a checkout of the collection vendored at
@@ -153,16 +169,21 @@ Worth revisiting if the stated condition changes.
 | The 5 dependency-bump skills | `update-bessa`, `update-guia`, `update-olinda-copilot-sdk`, `update-pajussara`, `update-pajussara-tui-comp` are five instances of one pattern: bump a sibling library delivered by CDN with a tarball fallback | A general "update a dependency distributed outside the package registry" skill is wanted — the pattern is real but narrow |
 | `js-to-ts` | Narrower than the practice-shaped skills here — converts one file rather than teaching a method. Only one real version (its 2 copies differ cosmetically), so no canonical-copy decision to make | A JS→TS migration is actually planned |
 | `next-roadmap-phase` | Bound to a documentation convention (`ARCHITECTURE.md`, `FUNCTIONAL_REQUIREMENTS.md`, `CHANGELOG.md`) rather than to a general practice | That convention becomes standard across the repos |
+| `rodar-app` | Two entrypoints, a port, a route list, a read-only snapshot — project-bound. Its one transferable finding (conflict markers inside a source file) is now in `triage-test-failures` | A general "drive this project's app" skill is wanted; the `/run` skill already covers much of it |
+| `encerrar-branch` sections 1–3 | Already asserted here, in places more fully: `git branch -d` against the tracking ref, the three layers a branch lives in, `deleteBranchOnMerge`, the stash | Superseded by `session-teardown`, `session-dropped` and `commit-in-shared-checkout` |
 
 ---
 
 ## Not yet assessed
 
-**11 first-party names**, triaged by description but not read in full:
+**10 first-party names**, triaged by description but not read in full —
+`triagem-n8n` left this list on 2026-10-13, read in full and distilled into
+`enumerate-a-batch`. The figure remains unreliable in the other direction: the
+three `trilhas_estudos` names were never counted, so treat it as a floor:
 
 | Bucket | Names |
 |---|---|
-| Project-bound | `campanha-video`, `find-highlights`, `rodada-update` (portal_brasileirao) · `triagem-n8n` (linkedin) · `analytics` (tokentop) · `ship` (articles) |
+| Project-bound | `campanha-video`, `find-highlights`, `rodada-update` (portal_brasileirao) · `analytics` (tokentop) · `ship` (articles) |
 | `ai_workflow.js` tooling | `ai-workflow-scaffold`, `fix-preflight-log-issues`, `next-roadmap-step` |
 | Overlaps what is imported | `docker-test-fix` (→ `triage-test-failures`) |
 | Thin | `update-submodules` |
@@ -244,6 +265,147 @@ Its regression check was rebuilt rather than carried across. It took a test
 count by grepping the human summary, which yields a number for Jest and nothing
 for `node --test` or mocha; when both sides yield nothing the comparison reports
 no regression having measured nothing.
+
+## The 2026-10-13 sweep: `linkedin`, `trilhas_estudos`, `conversando_com_pessoa`
+
+Four `SKILL.md` files across the three, found with the corpus command above
+plus `--maxdepth 4` on each repository's `.claude/`:
+
+| Repository | Skills | Outcome |
+|---|---|---|
+| `linkedin` | `triagem-n8n` | **distilled** → `enumerate-a-batch` |
+| `trilhas_estudos` | `encerrar-branch` | **distilled** → `commit-in-shared-checkout` |
+| | `autorar-catalogo` | skipped — persistent |
+| | `rodar-app` | skipped; one finding folded into `triage-test-failures` |
+| `conversando_com_pessoa` | none | `.claude/` holds only `settings.json` |
+
+Two notes on the corpus itself, both re-measured on 2026-10-13.
+
+**The exclusion list has a hole, and `-maxdepth 6` has been hiding it.**
+`linkedin` holds a second copy of `triagem-n8n` at
+`.claude/worktrees/worktree-envio-352-kodes/.claude/skills/`, which is **depth
+8** — so the corpus command never descends to it. Drop the depth limit and
+**46** files appear from under `.claude/worktrees/` across the repositories,
+every one of them a duplicate of a skill already counted, because the pattern
+`\.worktrees/` does not match `.claude/worktrees/`. Either keep the depth limit
+knowing that is what is doing the work, or add the path:
+
+```sh
+grep -vE '/node_modules/|/third_party/|/archived_docs/|\.worktrees/|/\.claude/worktrees/|/\.git/'
+```
+
+Verified: with that pattern added, the count under `.claude/worktrees/` goes to
+0 at any depth.
+
+**`trilhas_estudos` was never in the corpus counts at all.** Its three names
+are not among the 86, so the "11 not yet assessed" figure was short by three
+rather than by the one (`triagem-n8n`) that was listed. Re-running the corpus
+command today gives **168 files, 97 distinct names, 31 repositories** against
+the 151/86/29 recorded above — the sweep's own numbers were a snapshot, and
+repositories have been added since.
+
+### `encerrar-branch` → `commit-in-shared-checkout`
+
+279 lines, and **half of it was already here.** Its sections 1–2 — `git branch
+-d` accepting a branch merged only to `origin/<branch>`, the three layers a
+branch lives in, `git branch -r` against `git ls-remote`,
+`deleteBranchOnMerge` making the second delete fail — are what
+`session-teardown` and `session-dropped` already assert, in some places more
+fully. Its section 3 (`git stash` taking another session's in-flight edit) meets
+what `triage-test-failures` says about baselines from a different direction.
+
+What was **not** anywhere here is its sections 5–7, and they are one subject:
+in a shared checkout `HEAD` and the index are process-global, so a commit lands
+where it finds itself and carries what it finds staged. Four measured failures,
+each with a commit behind it in the source, all re-measured before import:
+
+- `git branch --show-current &&` as a guard — it exits 0 printing the wrong
+  branch, so the chain commits anyway
+- `git commit` taking a path another session left staged, from a command line
+  that named one path explicitly
+- `git commit -- PATH` recording the **worktree** version and discarding the
+  staged one, which makes it incompatible with the `git add -p` defence and so
+  punishes the careful case
+- `git add PATH` carrying another session's lines in that same file, invisibly
+  to the whole-index check
+
+Two things were added rather than carried over. The discarded staged version
+survives as an **unreachable blob** and is recoverable until `git gc` — the
+source said only that it is discarded. And the real fix is not a guard at all:
+`git worktree add` gives a private `HEAD` *and* a private index, verified both
+ways, so the guards are for when you are in the shared checkout anyway.
+
+Its closing section on how the skill itself went wrong four times in a day was
+kept, condensed. It is the best statement of a hazard this collection runs on —
+*"verified in an isolated repository" was in the text and was true; the axis
+that was tested passed, and the axis that was not tested was never imagined* —
+and two sessions in a row missed the same axis, which is an argument about the
+shape of problems rather than about who was looking.
+
+### `triagem-n8n` → `enumerate-a-batch`
+
+191 lines, and the earlier sweep's triage of it as *project-bound* was right
+about the bulk: a local n8n container, a webhook, two sibling repositories, five
+files to update, an eight-digit id constraint from one node. None of that
+transfers and none of it came.
+
+Underneath it is a discipline that does: **a batch assembled by replaying a
+query is not the batch you were asked about**, and it fails while looking
+correct. Four measured traps, rebuilt against a loopback fixture before import:
+
+- replaying the query that "produced" a digest can miss an id the digest
+  carried — in the source's own case, one absent from all 200 positions the
+  search returns, and the only hit in a batch of 51
+- two live windows over a re-ranked source cover the right **count** with the
+  wrong contents; the fixture gives union 40, zero duplicates, 10 foreign and
+  10 missing
+- a feed titled "new since last time" may be the whole board re-sent, with
+  items five weeks old
+- a sentinel-value health probe is rejected by the first stage and never
+  reaches the broken one — the placeholder and a real item return the same `500`
+
+Its measurement-integrity section came too, and is the part most likely to be
+reinvented wrongly: reading an automated pass's own justification and finding it
+convincing is **not** agreement with it, and must not be added to the same
+series as verdicts recorded before the run.
+
+### `autorar-catalogo` — skipped, persistent
+
+111 lines, entirely bound to one catalogue: a YAML schema, 11 numbered
+validations, `uv run trilhas validar`, a `rev` table, four directory
+conventions. Its value is the paths and the schema, which is the stated
+non-criterion. Two habits worth naming without importing: write a competence's
+*verification* before its title, because one you cannot describe a test for is a
+topic rather than a competence; and **never rename an id to correct it** —
+create the replacement and deprecate the original, because history points at
+ids. Both are domain modelling, not a measurement that goes wrong.
+
+### `rodar-app` — skipped, one finding folded out
+
+94 lines about two entrypoints, a port, a route list and a read-only snapshot.
+Project-bound. Three general observations, of which one was worth keeping:
+
+- **Kept**, in `triage-test-failures`: an unresolved merge in a shared checkout
+  leaves conflict markers inside the source, and the parse error names a line
+  you never touched. Correcting it on the way in was the point — the source
+  called it a `SyntaxError` (it is an `IndentationError` here), and its two
+  suggested probes, `git status` and `.git/MERGE_HEAD`, both read clean once the
+  conflicted file has been committed, while the markers remain. Only a grep
+  survives that case.
+- Not kept: a dev server serves the code it loaded, so restart before concluding
+  a change did not work. True and general, but widely known and carrying no
+  measured failure.
+- Not kept: composing an entity URL by hand yields a *handled* 404 that looks
+  like "the entity is gone", so take the href rather than building it. This is
+  the mirror of `verify-pasted-url` — a negative you cannot distinguish from
+  evidence about the data — and is noted there in spirit already.
+
+### `conversando_com_pessoa` — nothing to assess
+
+`.claude/` contains `settings.json` only; there is no `skills/` directory and no
+`SKILL.md` anywhere in the repository. Its practices live in `README.md` and
+`ROADMAP.md`, which are not in this corpus. Re-confirm by looking for the
+directory, not by searching for files.
 
 ## What makes a skill worth importing
 

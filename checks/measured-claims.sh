@@ -1072,6 +1072,362 @@ eq "and the one that ran" "$?" "0"
 eq "control: the count does find a match when there is one to find" \
    "$("$z/working" 2>/dev/null | grep -c SomeOtherTool | tr -d ' ')" "1"
 
+# ---------------------------------------------------------------------------
+# HEAD and the index are shared, so a commit records what it finds rather than
+# what you added.
+#   commit-in-shared-checkout 1 (show-current is not a guard), 2 (the whole
+#   index), 3 (the pathspec discards the staged version), 4 (their lines in
+#   your file, and commit -a).
+# ---------------------------------------------------------------------------
+echo
+echo "a commit in a checkout another session is editing"
+
+sh1=$(mktemp -d) || halt "could not make a fixture directory"
+keep "$sh1"
+git init -q -b main "$sh1/work" || halt "git init failed"
+cd "$sh1/work"                  || halt "could not enter the fixture"
+git config user.email checks@example.invalid
+git config user.name  checks
+printf 'line1\nline2\nline3\n' > shared.md
+printf 'base\n' > mine.txt
+printf 'base\n' > theirs.txt
+printf 'base\n' > unrelated.txt
+git add .
+git commit -q -m base
+git branch other-session
+
+# --- 1. the non-guard, standing on the wrong branch -------------------------
+git checkout -q other-session
+
+eq "git branch --show-current exits 0 on the wrong branch" \
+   "$(git branch --show-current >/dev/null 2>&1; echo $?)" "0"
+
+printf 'mine\n' >> mine.txt
+if git branch --show-current >/dev/null && git add mine.txt \
+   && git commit -q -m "chained" >/dev/null 2>&1; then
+  eq "so the && chain commits anyway, on the wrong branch" \
+     "$(git branch --show-current)" "other-session"
+else
+  bad "the && chain did not reach the commit — the fixture, not the claim"
+fi
+
+printf 'more\n' >> mine.txt
+before=$(git rev-parse HEAD)
+[ "$(git branch --show-current)" = main ] && git add mine.txt && git commit -q -m nope
+# Both halves are needed: an empty index is equally true of a chain that
+# aborted before the add and of one that ran all the way through the commit.
+eq "the comparison guard stops the chain before the add" \
+   "$(git diff --cached --name-only | wc -l | tr -d ' ')" "0"
+eq "and no commit was made" \
+   "$([ "$(git rev-parse HEAD)" = "$before" ] && echo unmoved || echo "moved to $(git log -1 --format=%s)")" \
+   "unmoved"
+
+# The guard aborted before the add, so that edit is still in the tree and
+# would block the checkout. Discard it; the branch switch is the subject here.
+git checkout -q -- mine.txt
+git checkout -q main
+printf 'ok\n' >> mine.txt
+[ "$(git branch --show-current)" = main ] && git add mine.txt && git commit -q -m yes
+eq "control: the same guard lets the commit through on the right branch" \
+   "$(git log -1 --format=%s)" "yes"
+
+# --- 2. the whole index ----------------------------------------------------
+printf 'theirs\n' >> theirs.txt && git add theirs.txt      # another session
+printf 'ours\n'   >> mine.txt   && git add mine.txt        # us
+git commit -q -m "only mine, surely"
+eq "a bare commit takes the other session's staged path too" \
+   "$(git show --stat --format= --name-only HEAD | sort | tr '\n' ' ')" \
+   "mine.txt theirs.txt "
+
+git reset -q --hard HEAD~1
+printf 'theirs\n' >> theirs.txt && git add theirs.txt
+printf 'ours\n'   >> mine.txt   && git add mine.txt
+eq "the unfiltered index check sees both paths" \
+   "$(git diff --cached --name-only | sort | tr '\n' ' ')" "mine.txt theirs.txt "
+eq "a path-filtered check sees only the one you named" \
+   "$(git diff --cached --name-only -- mine.txt | tr '\n' ' ')" "mine.txt "
+
+git commit -q -m "mine only" -- mine.txt
+eq "a pathspec commits only that path" \
+   "$(git show --stat --format= --name-only HEAD | tr '\n' ' ')" "mine.txt "
+eq "and leaves the other session's work staged and intact" \
+   "$(git diff --cached --name-only | tr '\n' ' ')" "theirs.txt "
+
+# --- 3. the pathspec discards what was staged for that path ----------------
+git reset -q --hard HEAD
+printf 'version-A\n' > mine.txt && git add mine.txt
+printf 'version-B\n' > mine.txt
+git commit -q -m "which one" -- mine.txt
+eq "a pathspec commit records the worktree version, not the staged one" \
+   "$(git show HEAD:mine.txt)" "version-B"
+eq "and the index is left holding the worktree version as well" \
+   "$(git show :mine.txt)" "version-B"
+
+blob=$(printf 'version-A\n' | git hash-object --stdin)
+eq "the discarded staged version survives as an unreachable blob" \
+   "$(git cat-file -t "$blob" 2>&1)" "blob"
+eq "and is readable until it is pruned" \
+   "$(git cat-file -p "$blob" 2>/dev/null)" "version-A"
+git gc --prune=now -q 2>/dev/null
+eq "after git gc --prune=now it is gone" \
+   "$(git cat-file -t "$blob" >/dev/null 2>&1; echo $?)" "128"
+
+# --- 4. their lines in a file you did name, and commit -a ------------------
+git reset -q --hard HEAD
+printf 'THEIR EDIT\nline2\nMY EDIT\n' > shared.md     # one line each
+git add shared.md
+eq "git add PATH stages their line in that file beside yours" \
+   "$(git diff --cached -- shared.md | grep -c '^+[^+]' | tr -d ' ')" "2"
+eq "while the whole-index check reports nothing unusual" \
+   "$(git diff --cached --name-only | tr '\n' ' ')" "shared.md "
+
+printf 'theirs\n' >> unrelated.txt                    # never added by anyone
+git commit -q -a -m "commit -a"
+eq "commit -a also takes an unstaged file nobody named" \
+   "$(git show --stat --format= --name-only HEAD | sort | tr '\n' ' ')" \
+   "shared.md unrelated.txt "
+
+# --- the fix: a worktree has its own HEAD and its own index ----------------
+if git worktree add -q --detach "$sh1/wt" HEAD 2>/dev/null; then
+  printf 'x\n' > "$sh1/wt/w.txt"
+  git -C "$sh1/wt" add w.txt
+  eq "a worktree's index is its own" \
+     "$(git -C "$sh1/wt" diff --cached --name-only | tr '\n' ' ')" "w.txt "
+  eq "control: that staging is invisible in the shared checkout" \
+     "$(git diff --cached --name-only | wc -l | tr -d ' ')" "0"
+  git worktree remove --force "$sh1/wt" 2>/dev/null
+else
+  skip "the worktree isolation claim" "git worktree add failed in the fixture"
+fi
+cd / || exit 1
+# ---------------------------------------------------------------------------
+# A batch assembled from a source that is re-queried, rebuilt on loopback.
+#   enumerate-a-batch 1 (a handed id absent from the whole query), 2 (two live
+#   windows are neither a tiling nor disjoint), 4 (a sentinel probe stops at
+#   the first stage). The skill's own 1-of-6 against 1-of-50 belongs to one
+#   host's API on one day and is not re-measured; the mechanism is.
+# ---------------------------------------------------------------------------
+echo
+echo "enumerating a batch from a re-queried source, on loopback"
+
+if ! command -v curl >/dev/null 2>&1; then
+  skip "batch enumeration claims" "curl is not installed"
+elif ! command -v python3 >/dev/null 2>&1; then
+  skip "batch enumeration claims" "python3 is not installed, and the fixture is a server"
+else
+  enum=$(mktemp -d) || halt "could not make a fixture directory"
+  keep "$enum"
+  cat > "$enum/server.py" <<'PYBATCH'
+import sys, time, json
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import urlparse, parse_qs
+
+# 60 ids the query can return, and one that is handed to us but is not in it.
+CORPUS  = ["%d" % (40000000 + i * 7) for i in range(60)]
+OFFLIST = "4473339752"
+DIGEST  = [CORPUS[3], CORPUS[41], OFFLIST]
+
+
+
+class H(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def _j(self, code, obj):
+        b = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(b)))
+        self.end_headers()
+        self.wfile.write(b)
+
+    def do_GET(self):
+        u = urlparse(self.path)
+        q = parse_qs(u.query)
+        start = int(q.get('start', ['1'])[0])
+        count = int(q.get('count', ['10'])[0])
+        if u.path == '/search':
+            # Re-ranked between requests, as any relevance ordering is. The
+            # ranking is taken from the request rather than from a call
+            # counter, so a retried or dropped request cannot shift the
+            # numbers this check asserts.
+            k = int(q.get('rank', ['1'])[0]) * 5
+            order = CORPUS[k:] + CORPUS[:k]
+            self._j(200, {"ids": order[start - 1:start - 1 + count]})
+        elif u.path == '/stable':
+            self._j(200, {"ids": CORPUS[start - 1:start - 1 + count]})
+        elif u.path == '/digest':
+            self._j(200, {"ids": DIGEST})
+        else:
+            self._j(404, {"error": "no such route"})
+
+    def do_POST(self):
+        n = int(self.headers.get('Content-Length', 0))
+        try:
+            body = json.loads(self.rfile.read(n) or b'{}')
+        except ValueError:
+            body = {}
+        i = str(body.get('id', ''))
+        if self.path != '/run':
+            return self._j(404, {"error": "flow not active"})
+        if len(i) != 8:
+            return self._j(500, {"error": "invalid id"})        # stage 1
+        return self._j(500, {"error": "Error in workflow"})      # stage 2, broken
+
+
+srv = HTTPServer(('127.0.0.1', 0), H)
+print(srv.server_address[1], flush=True)
+srv.timeout = 1
+deadline = time.time() + int(sys.argv[1])
+while time.time() < deadline:
+    srv.handle_request()
+PYBATCH
+  python3 "$enum/server.py" 60 > "$enum/port" 2>/dev/null & enumpid=$!
+  sleep 2
+  eport=''
+  read -r eport < "$enum/port" 2>/dev/null || true
+
+  if [ -z "$eport" ]; then
+    skip "batch enumeration claims" "the fixture server did not come up"
+  else
+    eb="http://127.0.0.1:$eport"
+    # The fixture must be alive before an absence means anything. A dead server
+    # reads exactly like every claim below failing.
+    eq "control: the fixture server is answering" \
+       "$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' "$eb/digest")" "200"
+
+    ids() { curl -s --max-time 5 "$1" \
+            | python3 -c 'import sys,json;print("\n".join(json.load(sys.stdin)["ids"]))'; }
+
+    # --- 1. a handed id absent from the whole of the query -----------------
+    ids "$eb/digest" | sort -u            > "$enum/handed"
+    ids "$eb/search?start=1&count=60&rank=1" | sort -u > "$enum/full"
+
+    eq "the replayed query enumerates its whole corpus" \
+       "$(wc -l < "$enum/full" | tr -d ' ')" "60"
+    eq "control: handed ids the replayed query does contain" \
+       "$(comm -12 "$enum/handed" "$enum/full" | wc -l | tr -d ' ')" "2"
+    eq "a handed id can be absent from the entire query said to produce it" \
+       "$(comm -23 "$enum/handed" "$enum/full" | wc -l | tr -d ' ')" "1"
+
+    # --- 2. two live windows against one snapshot --------------------------
+    # Three requests under three rankings: the two windows a caller would
+    # page, and the single snapshot the skill prescribes instead.
+    ids "$eb/search?start=1&count=20&rank=1"  | sort -u > "$enum/w1"
+    ids "$eb/search?start=21&count=20&rank=2" | sort -u > "$enum/w2"
+    sort -u "$enum/w1" "$enum/w2"                       > "$enum/live"
+    ids "$eb/search?start=1&count=40&rank=3"            > "$enum/snap"
+    sort -u "$enum/snap"                         > "$enum/snapu"
+
+    eq "two live windows look right: the union is the size asked for" \
+       "$(wc -l < "$enum/live" | tr -d ' ')" "40"
+    eq "and they duplicate nothing" \
+       "$(sort "$enum/w1" "$enum/w2" | uniq -d | wc -l | tr -d ' ')" "0"
+    eq "yet a quarter of them is outside the range asked for" \
+       "$(comm -23 "$enum/live" "$enum/snapu" | wc -l | tr -d ' ')" "10"
+    eq "and a quarter of that range was returned by neither window" \
+       "$(comm -13 "$enum/live" "$enum/snapu" | wc -l | tr -d ' ')" "10"
+
+    # The two local slices of that one snapshot, as the skill prescribes.
+    head -20 "$enum/snap" | sort -u > "$enum/s1"
+    tail -20 "$enum/snap" | sort -u > "$enum/s2"
+    eq "one snapshot sliced locally covers exactly the range, no duplicates" \
+       "$(printf '%s|%s|%s' \
+            "$(sort -u "$enum/s1" "$enum/s2" | wc -l | tr -d ' ')" \
+            "$(sort "$enum/s1" "$enum/s2" | uniq -d | wc -l | tr -d ' ')" \
+            "$(wc -l < "$enum/snapu" | tr -d ' ')")" "40|0|40"
+
+    # Control: the same paging over a stable ordering tiles exactly, so the
+    # defect above is the re-ranking and not the paging.
+    ids "$eb/stable?start=1&count=20"  | sort -u > "$enum/c1"
+    ids "$eb/stable?start=21&count=20" | sort -u > "$enum/c2"
+    eq "control: the same paging over a stable ordering covers 40 exactly" \
+       "$(sort -u "$enum/c1" "$enum/c2" | wc -l | tr -d ' ')" "40"
+    eq "control: and duplicates nothing either" \
+       "$(sort "$enum/c1" "$enum/c2" | uniq -d | wc -l | tr -d ' ')" "0"
+
+    # --- 4. a sentinel probe never reaches the broken stage ----------------
+    pcode() { curl -s --max-time 5 -o /dev/null -w '%{http_code}' \
+                   -X POST "$eb$1" -H 'Content-Type: application/json' -d "$2"; }
+
+    eq "the sentinel id is rejected by the first stage" \
+       "$(pcode /run '{"id":"0"}')" "500"
+    eq "a real id reaches the second stage, which is broken — same status" \
+       "$(pcode /run '{"id":"40000021"}')" "500"
+    eq "so the sentinel cannot discriminate healthy from broken-after-stage-1" \
+       "$([ "$(pcode /run '{"id":"0"}')" = "$(pcode /run '{"id":"40000021"}')" ] \
+          && echo same || echo differ)" "same"
+    eq "control: an absent route does differ — nothing is deployed, nothing spent" \
+       "$(pcode /gone '{"id":"0"}')" "404"
+  fi
+  kill "$enumpid" 2>/dev/null
+  wait "$enumpid" 2>/dev/null
+fi
+# ---------------------------------------------------------------------------
+# Conflict markers in a source file, and which merge-state probes still see
+# them once the conflict has been committed.
+#   triage-test-failures "the one exception: a parse error in a file you never
+#   opened".
+# ---------------------------------------------------------------------------
+echo
+echo "a parse error that is an unresolved merge"
+
+mm=$(mktemp -d) || halt "could not make a fixture directory"
+keep "$mm"
+git init -q -b main "$mm/work" || halt "git init failed"
+cd "$mm/work"                  || halt "could not enter the fixture"
+git config user.email checks@example.invalid
+git config user.name  checks
+printf 'def f():\n    return 1\n' > m.py
+git add m.py && git commit -q -m base
+git checkout -q -b theirs
+printf 'def f():\n    return 2\n' > m.py && git commit -q -a -m theirs
+git checkout -q main
+printf 'def f():\n    return 3\n' > m.py && git commit -q -a -m mine
+
+git merge theirs >/dev/null 2>&1
+eq "the merge conflicts, as the fixture needs it to" "$?" "1"
+
+# Mid-merge: all three probes see it.
+eq "mid-merge, MERGE_HEAD exists" \
+   "$([ -f "$(git rev-parse --git-dir)/MERGE_HEAD" ] && echo yes || echo no)" "yes"
+eq "mid-merge, the unmerged-path probe names the file" \
+   "$(git diff --name-only --diff-filter=U | tr '\n' ' ')" "m.py "
+eq "mid-merge, status reports it unmerged on both sides" \
+   "$(git status --porcelain | tr -s ' ' | tr '\n' ' ')" "UU m.py "
+eq "mid-merge, the markers are in the file" \
+   "$(grep -cE '^(<<<<<<<|>>>>>>>) ' m.py | tr -d ' ')" "2"
+
+# Committed: only the grep survives.
+git add m.py && git commit -q -m "resolved (not really)"
+eq "once committed, MERGE_HEAD is gone" \
+   "$([ -f "$(git rev-parse --git-dir)/MERGE_HEAD" ] && echo yes || echo no)" "no"
+eq "once committed, the unmerged-path probe is empty" \
+   "$(git diff --name-only --diff-filter=U | wc -l | tr -d ' ')" "0"
+eq "once committed, status is clean" \
+   "$(git status --porcelain | wc -l | tr -d ' ')" "0"
+eq "while the markers are still in the committed file" \
+   "$(grep -cE '^(<<<<<<<|>>>>>>>) ' m.py | tr -d ' ')" "2"
+eq "so only the grep still finds it" \
+   "$(git grep -lE '^(<<<<<<<|>>>>>>>) ' | tr '\n' ' ')" "m.py "
+
+# Positive control: the grep does not cry wolf on a clean tree.
+printf 'def f():\n    return 3\n' > m.py
+git commit -q -a -m "really resolved"
+eq "control: the grep finds nothing once the conflict is really resolved" \
+   "$(git grep -lE '^(<<<<<<<|>>>>>>>) ' | wc -l | tr -d ' ')" "0"
+
+if command -v python3 >/dev/null 2>&1; then
+  git revert -q --no-edit HEAD 2>/dev/null || git checkout -q HEAD~1 -- m.py
+  eq "control: the markers are back in the tree for the parse check" \
+     "$(grep -cE '^(<<<<<<<|>>>>>>>) ' m.py | tr -d ' ')" "2"
+  eq "a conflicted .py fails to parse, at the marker" \
+     "$(python3 -c 'import ast,sys; ast.parse(open("m.py").read())' 2>&1 \
+        | grep -cE 'IndentationError|SyntaxError' | tr -d ' ')" "1"
+else
+  skip "the conflicted-source parse claim" "python3 is not installed"
+fi
+cd / || exit 1
 echo
 [ "$skips" -gt 0 ] && printf '%s claims skipped for want of an optional tool or shell feature\n' "$skips"
 if [ "$fails" -eq 0 ]; then

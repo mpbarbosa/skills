@@ -19,6 +19,9 @@ answer:
   `Skipping app-directory sync`
 - a host answering `200` for an identifier that does not exist
 - a test asserting a refusal, green against a parser with no refusal in it
+- `git branch --show-current` printing the wrong branch and exiting 0, so the
+  `&&` after it commits anyway
+- two pages of a search covering 40 results, 10 of which were not asked for
 
 Skills that only list steps stayed where they were. So did skills whose value is
 the set of file paths they know.
@@ -72,6 +75,8 @@ not what is *true*.
 | | |
 |---|---|
 | [`triage-test-failures`](triage-test-failures/) | Is this failure yours or was it already red? Re-run the same suite on a clean baseline |
+| [`commit-in-shared-checkout`](commit-in-shared-checkout/) | `HEAD` and the index belong to every session. A commit records what it finds, not what you added |
+| [`enumerate-a-batch`](enumerate-a-batch/) | Prove the batch is the batch, when the items come from a query replayed rather than a list handed over |
 | [`sync-version`](sync-version/) | Propagate a version bump everywhere it is claimed, and nowhere it is recorded |
 | [`update-url-dependency`](update-url-dependency/) | Bump a dependency the package manager cannot see — a tarball, a CDN import, a clone |
 | [`resolve-npm-deprecations`](resolve-npm-deprecations/) | Trace each `npm warn deprecated` to its parent, and prove the override regressed nothing. **npm-specific** |
@@ -139,6 +144,8 @@ What is covered, and the measurement each section turns on:
 | `verify-pasted-url` | a lenient host answering `200` for an invented id exactly as for a real one, against a strict one that does not |
 | `update-url-dependency` | one release written two ways, and an early-exit guard reading one location of several |
 | `verify-workflow-shell` | `git merge-base --is-ancestor X X` being true, so an ancestor guard refuses the redeploy it was asked for |
+| `commit-in-shared-checkout` | `git branch --show-current` exiting 0 on the wrong branch; a bare commit taking a path another session staged; a pathspec commit recording the worktree version and discarding the staged one; `commit -a` taking a file nobody named |
+| `enumerate-a-batch` | two live windows covering the right *count* and the wrong contents, against one snapshot sliced locally; a handed id absent from the whole query said to have produced it; a sentinel-value probe and a pipeline broken after stage 1 returning the same status |
 
 Positive controls throughout, for one reason: a probe that cannot see a branch
 which *is* on the remote proves nothing by failing to see one that is not. They
@@ -182,10 +189,31 @@ written:
   that rejects it, while a current dash, bash and zsh all accept it. A workflow
   step running under `sh` therefore has neither `pipefail` nor `PIPESTATUS`, so
   the skill now gives the form that needs no pipe at all.
+- `triage-test-failures` gained a section during the `trilhas_estudos` import,
+  and correcting the source's claim was the point of writing it. The source said
+  conflict markers in a `.py` give a `SyntaxError`; the interpreter here raises
+  `IndentationError`, and more usefully the source's two probes — `git status`
+  and `.git/MERGE_HEAD` — both read **clean** once someone has `git add`ed the
+  conflicted file and committed it, while the markers are still in the file.
+  They answer "was a merge interrupted", not "are there conflict markers". Only
+  the `git grep` survives that case, and it is now the one the skill tells you
+  to run.
+- The checks written for the two new skills were mutation-tested like the rest,
+  and the exercise earned its keep twice. One assertion was **weak**: it
+  established that the guarded chain left nothing staged, which is equally true
+  of a chain that aborted before `git add` and of one that ran all the way
+  through the commit — so replacing the guard with the non-guard left it green.
+  It now also asserts `HEAD` did not move. And one *mutation* was wrong rather
+  than one assertion: switching a single window to the stable endpoint left the
+  numbers at `10` and `10` by coincidence, because the fixture's re-ranking
+  still advanced for the other two requests. A mutation that does not go red is
+  not evidence until you have checked which of the two it indicts.
 - `sync-version`, `triage-test-failures` and `resolve-npm-deprecations` needed
-  no correction. All nine anchoring cases, the six-cell diff table, the
-  `1`/`0`/`2` diff-grep counts and the three-runner summary patterns reproduced
-  exactly as printed.
+  no correction to anything they already claimed. All nine anchoring cases, the
+  six-cell diff table, the `1`/`0`/`2` diff-grep counts and the three-runner
+  summary patterns reproduced exactly as printed. (The `triage-test-failures`
+  section above is material added later, from an import, not a claim of its own
+  that failed.)
 
 ### Not covered
 
@@ -200,6 +228,18 @@ discriminate a real id from an invented one is rebuilt here, while the specific
 
 `import-adapt-guides` is the only skill with nothing to re-check: it quotes no
 measurement.
+
+The two skills imported from `trilhas_estudos` and `linkedin` are asserted the
+same two ways the collection already uses. The git claims in
+`commit-in-shared-checkout` run against a throwaway repository, so they are
+measurements of `git` itself. The claims in `enumerate-a-batch` run against a
+server the check starts on loopback, and its re-ranking is taken from the
+request rather than from a call counter — an earlier version derived it from how
+many times the endpoint had been called, which made the check flaky: a retried
+request shifted every number after it. What is *not* asserted there is the
+observation that belongs to one host's API on one day (one carried id absent
+from all 200 positions of its own search, and the only hit in a batch of 51);
+that stays a recorded observation, as the byte counts in `verify-pasted-url` do.
 
 The other gap is behavioural. Nothing here checks whether a skill *triggers* on
 the right request, or whether an agent following it reaches the right verdict.

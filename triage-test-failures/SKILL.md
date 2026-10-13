@@ -32,6 +32,37 @@ spending it on a unit failure is a way of not reading the assertion.
 to network, live data, timing, browser state, seeded randomness and each other.
 This is where triage earns its keep.
 
+### The one exception: a parse error in a file you never opened
+
+In a shared checkout, an unresolved merge leaves conflict markers **inside the
+source**, and the compiler blames the line they sit on. Verified, in a `.py`
+left mid-merge:
+
+        <<<<<<< HEAD
+        ^^
+    IndentationError: expected an indented block after function definition on line 1
+
+A parse error whose line you do not recognise is worth one cheap check before
+you read it as yours. Three probes, and they fail in a specific order:
+
+```sh
+test -f "$(git rev-parse --git-dir)/MERGE_HEAD"   # a merge is in progress
+git diff --name-only --diff-filter=U              # -> m.py   (unmerged paths)
+git grep -lE '^(<<<<<<<|>>>>>>>) '                # -> m.py   (markers anywhere)
+```
+
+Verified mid-merge: `MERGE_HEAD` exists, `--diff-filter=U` names the file, and
+`git status --porcelain` shows `UU m.py`. **Then verified after someone `git
+add`ed the conflicted file and committed it:** `MERGE_HEAD` is gone,
+`--diff-filter=U` is empty and `git status --porcelain` is *clean* — while the
+markers are still in the file. So the first two probes answer "was a merge
+interrupted", not "are there conflict markers", and only the `git grep` survives
+a committed conflict. Run the grep.
+
+Generated artifacts carry this one step further: a conflicted lock file or
+snapshot parses as a data error later and further from its cause, so regenerate
+it rather than reading the failure.
+
 ## Run the baseline in a worktree, not a stash
 
 The instinct is `git stash`, and it works, but it puts your uncommitted work
