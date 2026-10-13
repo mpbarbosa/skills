@@ -127,6 +127,17 @@ ls -d ~/.claude/skills/commit-in-shared-checkout \
       2>/dev/null
 ```
 
+**Read the lines; never gate an `if` on the exit status** — the same shape as the
+`pgrep` count above, and it fails in the dangerous direction. With `2>/dev/null`,
+`ls -d A B` exits **2** whenever *either* path is missing, and the usual case is
+exactly that: installed globally, absent from the repo. Measured, with the skill
+genuinely installed under `~/.claude/skills`:
+
+    ls -d ~/.claude/skills/commit-in-shared-checkout /tmp/absent 2>/dev/null
+      prints the symlink, and exits 2
+
+An `if` on that status reports the skill missing while it is loaded and usable.
+
 *Installed* — follow it, rather than improvising the commit here. *Not installed*
 — say so in the answer, and still keep the two rules it exists to enforce:
 **stage explicit pathspecs, never `-A` / `-u` / `.`**, and **read the branch back
