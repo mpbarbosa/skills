@@ -1,6 +1,6 @@
 ---
 name: commit-in-shared-checkout
-description: Commit safely in a checkout that other agents and the user are editing at the same time, where HEAD and the index are shared mutable state — so a commit lands on a branch you did not choose, or carries files and lines you never added. Use before any `git add` or `git commit` in a shared or multi-agent checkout, when a commit turned out to contain someone else's work, when `git switch` is blocked by uncommitted files you did not write, before reaching for `git stash`, or when deciding whether a commit that went to the wrong branch should be moved.
+description: Commit and push safely in a checkout that other agents and the user are editing at the same time, where HEAD and the index are shared mutable state — so a commit lands on a branch you did not choose, carries files and lines you never added, or a bare `git push` publishes someone else's branch while your own work stays on one disk. Use before any `git add`, `git commit` or `git push` in a shared or multi-agent checkout, when work needs to reach the remote, when a commit turned out to contain someone else's work, when `git switch` is blocked by uncommitted files you did not write, before reaching for `git stash`, when a push is rejected and `--force` is tempting, or when deciding whether a commit that went to the wrong branch should be moved.
 ---
 
 # Committing in a checkout someone else is editing
@@ -217,6 +217,75 @@ If the mixed commit is still local, fix it. If it has been pushed in a checkout
 other sessions pull from, **do not rewrite it** — published history that others
 have is worth more than correct attribution. Tell the session whose work you
 carried, so it does not commit the same lines a second time.
+
+## 8. The commit is not the backup, and `git push` repeats failure 1
+
+A commit in a shared checkout moves the work from *one process* to *one disk*.
+Until it is on the server it still exists in a single place, and every finding
+above is about a command that obeys a reading which has already expired — the
+push is simply the last of them.
+
+**`git push` with no refspec pushes whatever branch `HEAD` is on, which is the
+same thing section 1 is about.** The other session can switch it between your
+commit and your push. Measured, with my commit on `main` and `HEAD` switched to
+their branch in between:
+
+    git push                  -> * [new branch]  outra-sessao -> outra-sessao
+    git ls-remote             -> main unchanged on the server
+    git rev-list --count origin/main..main  -> 1   my commit, still here only
+
+Two things went wrong in one command, and the second is the dangerous one:
+
+| What happened | Why it matters |
+|---|---|
+| It **published their branch** | A new ref on a shared server that nobody asked for, created by a command you ran to protect *your* work |
+| It **did not push your commits** | It exits 0 and prints a success line, so it reads exactly like a successful backup |
+
+**Do not expect a refusal to save you.** Whether a branch with no upstream is
+refused or silently created depends on `push.default` and
+`push.autoSetupRemote` — config you do not control and which varies per
+machine. On the machine this was measured on, `push.autosetupremote true` sits
+in `~/.config/git/config`, so it applies to **every repository, including ones
+created seconds ago**; and passing `-c push.autoSetupRemote=false` on the
+command line did not change the outcome in my test. I did not establish why,
+which is the honest state of it — so the rule below is written not to depend on
+it.
+
+**Name the refspec. It does not consult `HEAD` at all.** Verified, standing on
+another session's branch the whole time:
+
+    git push origin main      -> 82e4a69..4c09c04  main -> main
+    git ls-remote --heads     -> only main; their branch was NOT pushed
+
+That is the whole defence, and unlike the pair in section 3 it has no trade-off:
+`git push origin main` pushes the local ref called `main` whatever is checked
+out, and touches nothing else.
+
+**Read the commits you are about to publish — a push ships the branch, not your
+commits.** This is section 2 one level up: just as `git commit` takes the whole
+index, `git push` takes every commit on that branch, including ones other
+sessions landed while you worked. Usually that is correct and wanted. Read it
+anyway, because this is the last moment it is cheap:
+
+```sh
+git log --format='%h %an | %s' origin/main..main
+git diff --stat origin/main..main
+```
+
+**Then read the result back from the server, not from `origin/main`.** The local
+remote-tracking ref is local state and is exactly what a failed push leaves
+untouched:
+
+```sh
+git ls-remote --heads origin main      # the server's answer
+git rev-list --count origin/main..main # expect 0
+```
+
+**If the push is rejected, it is doing its job.** A non-fast-forward means the
+server moved while you worked. `git fetch origin && git merge origin/main`, then
+push again. **Never `--force` in a shared checkout** — it deletes commits that
+other sessions and the person may already have pulled, which is the one failure
+in this document that no later command can undo.
 
 ## When editing this skill: verified does not license the generalisation
 
