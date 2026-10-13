@@ -45,6 +45,28 @@ sibling repositories found 27 skill names duplicated across them and **22 of
 those had diverged** — one name had six different versions. Symlinks make a
 `git pull` here the whole update.
 
+That is not a hypothetical. On 2026-10-13, seven of these skills were installed
+at `~/.claude/skills/` as **copies**, and six had drifted: all six were the
+pre-audit text, still carrying the `pgrep` form and the bare `ss -ltn` that
+[the audit below](#what-the-audit-found) records as corrected. The installed
+copy was the version with the defect in it. Re-run the loop above to replace a
+copy with a link.
+
+### Scoped to this repository
+
+`commit-in-shared-checkout` is also linked at
+[`.claude/skills/`](.claude/skills/), so a session working *here* gets it
+without a global install. The link is relative (`../../commit-in-shared-checkout`)
+and committed, so a clone has it too. Any skill can be scoped the same way:
+
+```bash
+ln -sfn ../../<name> .claude/skills/<name>
+```
+
+One thing to know if you add more: `find` does not follow symlinks, so the
+corpus command in [`SURVEY.md`](SURVEY.md) counts these once — but `find -L`
+counts them twice.
+
 ## The skills
 
 ### Closing a session down safely

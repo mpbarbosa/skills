@@ -297,6 +297,11 @@ grep -vE '/node_modules/|/third_party/|/archived_docs/|\.worktrees/|/\.claude/wo
 Verified: with that pattern added, the count under `.claude/worktrees/` goes to
 0 at any depth.
 
+Related, and in the opposite direction: this repository now links a skill into
+its own `.claude/skills/` for project scope. `find` does not follow symlinks, so
+the command above counts it once — **`find -L` counts it twice.** Verified both
+ways.
+
 **`trilhas_estudos` was never in the corpus counts at all.** Its three names
 are not among the 86, so the "11 not yet assessed" figure was short by three
 rather than by the one (`triagem-n8n`) that was listed. Re-running the corpus
