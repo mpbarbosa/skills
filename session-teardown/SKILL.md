@@ -273,6 +273,34 @@ find it, and the dev server behind it is released by the launcher's own stop cal
 (e.g. `preview_stop <serverId>`) — not by port and not by PID. Record the
 `serverId` when you start it; that is the only handle you get.
 
+**And a tab you opened is not covered by that stop call either.** When the
+session drove a browser without ever starting a server — reading docs, filling a
+form, checking a deployed page — there is no `serverId` to release and nothing
+for `ss` to find, yet the tab stays open in the person's browser after the
+session is gone. Close the tabs this session opened:
+
+```sh
+tabs_context_mcp            # or the built-in browser's tabs_context
+tabs_close_mcp <tabId>      # one call per tab you opened
+```
+
+**Do not pass `createIfEmpty: true` here.** It is the obvious spelling and it
+creates a tab — the measurement would manufacture the thing it is checking for,
+the same shape as this skill's own file tripping a cleanliness check. Measured
+during a teardown: with the group's last tab closed, a bare `tabs_context_mcp`
+reports *"This session's tab group no longer exists"*, which is the reading you
+want; `createIfEmpty: true` would have answered with a fresh empty tab instead.
+
+**Here attribution is given to you, which is rare.** Unlike `ss`, which shows
+the whole machine, the tab listing shows only this session's own group, so every
+tab it returns is one to close — and tabs the person opened themselves are not
+in it and cannot be closed by this call. Measured: closing the last tab in the
+group reported *"Group is now empty (auto-removed)"*, so the group is gone with
+it and nothing is left to sweep.
+
+⚠️ **The browser is the person's, with their sessions signed in.** Closing a tab
+is the whole of the cleanup — never sign out, and never close a window.
+
 **Background tasks and monitors:** these have no on-disk trace and die silently
 with the session. Terminate them deliberately, and if anyone was waiting on a
 result, that belongs in step 1 rather than here.
@@ -295,6 +323,7 @@ git branch --format='%(refname:short)'       # local only
 git ls-remote --heads origin                 # asks the remote, not a cached ref
 ss -ltnp 2>/dev/null | grep -E ':(3[0-9]{3}|[45][0-9]{3}|8[0-9]{3})'
 git status --porcelain -uall
+tabs_context_mcp                             # bare, never createIfEmpty: true
 ```
 
 `-ltnp`, as above: bare `ss -ltn` prints a port and no owner, and this step is
