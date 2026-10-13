@@ -270,7 +270,19 @@ anyway, because this is the last moment it is cheap:
 ```sh
 git log --format='%h %an | %s' origin/main..main
 git diff --stat origin/main..main
+git rev-list --count origin/main..main    # does the count match the lines?
 ```
+
+**Count the lines against `rev-list --count`, because something between you and
+`git` can drop one.** Measured, in a shell where a token-reducing wrapper
+rewrites `git` through a hook: the `--format` log above printed **2** commits
+while `rev-list --count` printed **3** over the same range, in the same call.
+The one it dropped was the **merge** commit — and a merge is exactly the commit
+that carries another session's work, so a filter that hides merges hides the
+thing this check is for. The same wrapper printed the merge when asked for
+`--oneline`, so this is per-output-form and not a property of merges. Bypassing
+the wrapper (`/usr/bin/git`, an absolute path) printed all three. Two numbers
+that should agree are worth more here than either number alone.
 
 **Then read the result back from the server, not from `origin/main`.** The local
 remote-tracking ref is local state and is exactly what a failed push leaves
