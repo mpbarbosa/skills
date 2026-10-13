@@ -110,6 +110,29 @@ Ignore paths you did not create. Ignore this skill's own file if you installed i
 this session: a tracked `.claude/skills/` directory means installing a skill
 leaves an untracked file that check 1 will report on its first run forever.
 
+**When check 1 finds work of your own, the commit is the hazard — not the dirt.**
+This is a shared checkout, so `HEAD` and the index are process-global: a `git add`
+can sweep in a file another session wrote between your two commands, and a
+`git commit` can land on a branch they switched you to. Both exit 0 and print a
+plausible summary. [`commit-in-shared-checkout`](../commit-in-shared-checkout/)
+is that procedure, and this check is one of the places it is for.
+
+**Measure whether it is installed; do not recall.** Which skills a session can
+load is per session, and a skill that exists on disk is not necessarily one this
+session was given:
+
+```sh
+ls -d ~/.claude/skills/commit-in-shared-checkout \
+      "$(git rev-parse --show-toplevel)/.claude/skills/commit-in-shared-checkout" \
+      2>/dev/null
+```
+
+*Installed* — follow it, rather than improvising the commit here. *Not installed*
+— say so in the answer, and still keep the two rules it exists to enforce:
+**stage explicit pathspecs, never `-A` / `-u` / `.`**, and **read the branch back
+*after* the commit** (`git log --oneline -1 <branch>`), because reading it
+beforehand guards nothing — the switch can happen between the read and the write.
+
 **2. Commits that exist on one disk only.** This check has two false negatives
 and both fail toward "safe", so run it exactly as written.
 
@@ -242,7 +265,11 @@ answer and a useful one.
 Then one line per check that **found** something, and silence for the rest. The
 reader is deciding, not auditing.
 
-If something blocks, give the command that clears it.
+If something blocks, give the command that clears it — **and in a shared checkout
+the command has to be safe to paste.** `git add -A && git commit` is not: by the
+time it runs, the tree may hold someone else's file. Name the paths. If the
+clearing step is a commit and `commit-in-shared-checkout` is installed, point at
+it instead of inlining a one-liner, and say that you did.
 
 **Clear:**
 ```
