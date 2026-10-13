@@ -340,6 +340,25 @@ source said only that it is discarded. And the real fix is not a guard at all:
 `git worktree add` gives a private `HEAD` *and* a private index, verified both
 ways, so the guards are for when you are in the shared checkout anyway.
 
+**Re-checked on 2026-10-13, section by section, after a second request to import
+it.** Sections 1, 3 and 4 are covered: `git branch -d` against the tracking ref
+and the three layers by `session-teardown` and `session-dropped`; the stash by
+`commit-in-shared-checkout` section 6; "`git status` describes an instant" by
+`session-pending`'s "the answer expires in seconds". Its closing three-way
+classification of leftovers is `session-dropped`'s "yours and forgotten, yours
+and deliberately kept, or not yours — only the first is a failure", including
+the part about declaring a deliberate one.
+
+Section 2 was **half covered, and the re-check found the other half.** That a
+branch may have no remote copy, and what to run to see it, is `session-pending`
+check 2. What was nowhere here is the limit on what you may then do: push it,
+but **do not open the PR**, because describing someone else's commit means
+inventing the intent behind it and the PR body is read as the author's own
+account. Now in `session-teardown` step 2, with
+`git log --format='%h %an %s' origin/main..<branch>` to name who wrote what. So
+the first import was not complete, and only going back through the sections
+against the text showed it.
+
 Its closing section on how the skill itself went wrong four times in a day was
 kept, condensed. It is the best statement of a hazard this collection runs on —
 *"verified in an isolated repository" was in the text and was true; the axis

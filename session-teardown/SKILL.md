@@ -40,6 +40,15 @@ mess**, because a mess is visible.
 "is a branch on the remote". Do this before removing anything, so every later
 step is reversible.
 
+Push is where this stops, though. **If the branch carries commits you did not
+write** — another session can commit onto the branch that happens to be at
+`HEAD`, which may be yours — push it and stop there. Do not open the PR.
+Describing someone else's commit means inventing the intent behind it, and the
+PR body is what reviewers read as the author's own account. Ask the session that
+wrote it, or the user. `git log --format='%h %an %s' origin/main..<branch>` names
+who wrote what — `--format` overrides `--oneline`, so do not pass both —
+and `session-pending` check 2 is where you will first see it.
+
 **3. Then remove your own artefacts** — worktrees, branches, servers, background
 tasks. This is the destructive half and everything in it is yours only.
 
