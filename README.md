@@ -168,6 +168,8 @@ What is covered, and the measurement each section turns on:
 | `verify-workflow-shell` | `git merge-base --is-ancestor X X` being true, so an ancestor guard refuses the redeploy it was asked for |
 | `commit-in-shared-checkout` | `git branch --show-current` exiting 0 on the wrong branch; a bare commit taking a path another session staged; a pathspec commit recording the worktree version and discarding the staged one; `commit -a` taking a file nobody named |
 | `enumerate-a-batch` | two live windows covering the right *count* and the wrong contents, against one snapshot sliced locally; a handed id absent from the whole query said to have produced it; a sentinel-value probe and a pipeline broken after stage 1 returning the same status |
+| `commit-in-shared-checkout`, the push half | a bare `git push` publishing the branch `HEAD` is on while your own commit stays unpushed, against a named refspec that ignores `HEAD`; `git config --get` reporting the value you set while `push` acts on the global one; a rejected push leaving the remote-tracking ref untouched |
+| `session-pending` | `ls -d` over one present and one absent path exiting **2** while still printing the one that is there |
 
 Positive controls throughout, for one reason: a probe that cannot see a branch
 which *is* on the remote proves nothing by failing to see one that is not. They
@@ -220,6 +222,17 @@ written:
   They answer "was a merge interrupted", not "are there conflict markers". Only
   the `git grep` survives that case, and it is now the one the skill tells you
   to run.
+- `commit-in-shared-checkout` had an open question in it — `-c
+  push.autoSetupRemote=false` not changing a push's behaviour, with "I did not
+  establish why" written down as the honest state. **Resolved, and the answer is
+  worse than a flag that does not work.** On git 2.53.0, with a global
+  `autoSetupRemote = true`, `git config --get` reports the `false` you passed
+  while `git push` creates the branch anyway; with the global file out of the
+  way, the same `-c false` refuses. `GIT_CONFIG_COUNT` and
+  `git config --local` behave identically, so a global `true` is not
+  overridable from inside the repository at all — and the command you would use
+  to check cannot tell you which case you are in. Both halves are now asserted,
+  against a fixture global config rather than this machine's.
 - The checks written for the two new skills were mutation-tested like the rest,
   and the exercise earned its keep twice. One assertion was **weak**: it
   established that the guarded chain left nothing staged, which is equally true

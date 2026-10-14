@@ -241,15 +241,32 @@ Two things went wrong in one command, and the second is the dangerous one:
 | It **published their branch** | A new ref on a shared server that nobody asked for, created by a command you ran to protect *your* work |
 | It **did not push your commits** | It exits 0 and prints a success line, so it reads exactly like a successful backup |
 
-**Do not expect a refusal to save you.** Whether a branch with no upstream is
-refused or silently created depends on `push.default` and
-`push.autoSetupRemote` — config you do not control and which varies per
-machine. On the machine this was measured on, `push.autosetupremote true` sits
-in `~/.config/git/config`, so it applies to **every repository, including ones
-created seconds ago**; and passing `-c push.autoSetupRemote=false` on the
-command line did not change the outcome in my test. I did not establish why,
-which is the honest state of it — so the rule below is written not to depend on
-it.
+**Do not expect a refusal to save you**, and do not expect to be able to turn
+the refusal back on. Whether a branch with no upstream is refused or silently
+created is governed by `push.autoSetupRemote`, and on the machine this was
+measured on `autoSetupRemote = true` sits in `~/.config/git/config`, so it
+applies to **every repository, including ones created seconds ago**.
+
+An earlier version of this skill noted that `-c push.autoSetupRemote=false` did
+not change the outcome and left the reason open. Resolved, on git 2.53.0, and
+the result is worse than a flag that does not work:
+
+    global file says true, and you pass -c false:
+      git config --get push.autoSetupRemote  -> false
+      git push                               -> CREATED the branch
+
+    control, the same -c with the global file out of the way:
+      GIT_CONFIG_GLOBAL=/dev/null
+      git config --get push.autoSetupRemote  -> false
+      git push                               -> refused
+
+**`git config --get` reports the value you set and `git push` acts on the other
+one.** The override is honoured when nothing else sets the key and is lost to a
+global `true` — and the command you would naturally use to check cannot tell you
+which case you are in. Measured the same way: `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`
+and `git config --local push.autoSetupRemote false` both also report `false` and
+both also create the branch, so a global `true` is not overridable from inside
+the repository at all. Do not try to disable it; make the rule not need it.
 
 **Name the refspec. It does not consult `HEAD` at all.** Verified, standing on
 another session's branch the whole time:

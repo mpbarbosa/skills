@@ -1428,6 +1428,162 @@ else
   skip "the conflicted-source parse claim" "python3 is not installed"
 fi
 cd / || exit 1
+# ---------------------------------------------------------------------------
+# A bare push obeys HEAD, and a named refspec does not.
+#   commit-in-shared-checkout 8. The global push.autoSetupRemote on the machine
+#   this was written on is replaced here by a fixture global config, so the
+#   check measures git rather than this machine.
+# ---------------------------------------------------------------------------
+echo
+echo "a push in a checkout another session is editing"
+
+ps1=$(mktemp -d) || halt "could not make a fixture directory"
+keep "$ps1"
+printf '[push]\n\tautoSetupRemote = true\n' > "$ps1/gitconfig.on"
+: > "$ps1/gitconfig.off"
+git init -q --bare "$ps1/origin.git" || halt "git init --bare failed"
+git init -q -b main "$ps1/work"      || halt "git init failed"
+cd "$ps1/work"                       || halt "could not enter the fixture"
+git config user.email checks@example.invalid
+git config user.name  checks
+git remote add origin "$ps1/origin.git"
+git commit -q --allow-empty -m base
+GIT_CONFIG_GLOBAL="$ps1/gitconfig.off" git push -q origin main \
+  || halt "the fixture push of main failed"
+
+# My commit on main, then another session switches HEAD away.
+git commit -q --allow-empty -m "my work on main"
+git checkout -q -b other-session
+
+heads() { git ls-remote --heads origin | sed 's:.*refs/heads/::' | sort | tr '\n' ' '; }
+
+eq "control: before the push, only main is on the remote" "$(heads)" "main "
+eq "control: and my commit on main is unpushed" \
+   "$(git rev-list --count origin/main..main)" "1"
+
+# --- a bare push, with autoSetupRemote on, obeys HEAD ----------------------
+GIT_CONFIG_GLOBAL="$ps1/gitconfig.on" git push -q 2>/dev/null
+eq "a bare push publishes the branch HEAD is on, which is not yours" \
+   "$(heads)" "main other-session "
+eq "and leaves your own commit unpushed, having exited 0" \
+   "$(git rev-list --count origin/main..main)" "1"
+
+# --- the override that does not override ----------------------------------
+git push -q origin --delete other-session 2>/dev/null
+git branch --unset-upstream other-session 2>/dev/null
+eq "control: the remote is back to main alone" "$(heads)" "main "
+
+eq "git config --get reports the -c value" \
+   "$(GIT_CONFIG_GLOBAL="$ps1/gitconfig.on" \
+      git -c push.autoSetupRemote=false config --get push.autoSetupRemote)" "false"
+GIT_CONFIG_GLOBAL="$ps1/gitconfig.on" \
+  git -c push.autoSetupRemote=false push -q 2>/dev/null
+eq "while the push acts on the global true and creates the branch anyway" \
+   "$(heads)" "main other-session "
+
+git push -q origin --delete other-session 2>/dev/null
+git branch --unset-upstream other-session 2>/dev/null
+eq "control: with no global true, the same -c false does refuse" \
+   "$(GIT_CONFIG_GLOBAL="$ps1/gitconfig.off" \
+      git -c push.autoSetupRemote=false push 2>&1 >/dev/null \
+      | grep -c 'no upstream branch' | tr -d ' ')" "1"
+eq "control: and nothing was created by the refusal" "$(heads)" "main "
+
+# --- naming the refspec ignores HEAD entirely -----------------------------
+eq "control: still standing on the other session's branch" \
+   "$(git branch --show-current)" "other-session"
+GIT_CONFIG_GLOBAL="$ps1/gitconfig.on" git push -q origin main 2>/dev/null
+eq "a named refspec pushes your branch and creates nothing else" \
+   "$(heads)" "main "
+eq "and your commit is now actually on the server" \
+   "$(git rev-list --count origin/main..main)" "0"
+
+# --- a rejected push leaves the tracking ref untouched --------------------
+git init -q -b main "$ps1/other" || halt "git init failed"
+cd "$ps1/other" || halt "could not enter the second fixture"
+git config user.email checks@example.invalid
+git config user.name  checks
+git remote add origin "$ps1/origin.git"
+GIT_CONFIG_GLOBAL="$ps1/gitconfig.off" git fetch -q origin
+git checkout -q -b main --track origin/main 2>/dev/null || git checkout -q main
+git commit -q --allow-empty -m "landed by someone else"
+GIT_CONFIG_GLOBAL="$ps1/gitconfig.off" git push -q origin main \
+  || halt "the second fixture could not push"
+
+cd "$ps1/work" || halt "could not return to the first fixture"
+git checkout -q main
+git commit -q --allow-empty -m "mine, now behind"
+before=$(git rev-parse origin/main)
+GIT_CONFIG_GLOBAL="$ps1/gitconfig.off" git push origin main >/dev/null 2>&1
+eq "a non-fast-forward push is rejected" "$?" "1"
+eq "and the local remote-tracking ref is exactly what it was" \
+   "$([ "$(git rev-parse origin/main)" = "$before" ] && echo unmoved || echo moved)" "unmoved"
+eq "so rev-list against it still reports your commit as unpushed" \
+   "$(git rev-list --count origin/main..main)" "1"
+cd / || exit 1
+
+# ---------------------------------------------------------------------------
+# Two output forms of git log over one range, and a merge commit.
+#   commit-in-shared-checkout 8 "count the lines against rev-list --count".
+#   The skill's own 2-against-3 was a wrapper in that shell; what is asserted
+#   here is the control it rests on — plain git agrees with itself.
+# ---------------------------------------------------------------------------
+echo
+echo "counting the commits a push would publish"
+
+mg=$(mktemp -d) || halt "could not make a fixture directory"
+keep "$mg"
+git init -q -b main "$mg/w" || halt "git init failed"
+cd "$mg/w"                  || halt "could not enter the fixture"
+git config user.email checks@example.invalid
+git config user.name  checks
+git commit -q --allow-empty -m base
+base=$(git rev-parse HEAD)
+git checkout -q -b side
+git commit -q --allow-empty -m "theirs on a side branch"
+git checkout -q main
+git commit -q --allow-empty -m "mine on main"
+git merge -q --no-ff -m "merge side into main" side
+
+eq "the range holds three commits, one of them a merge" \
+   "$(git rev-list --count "$base"..HEAD)" "3"
+eq "control: and one of the three really is a merge" \
+   "$(git rev-list --merges --count "$base"..HEAD)" "1"
+eq "plain git --format prints a line for each, merge included" \
+   "$(git log --format='%h %an | %s' "$base"..HEAD | wc -l | tr -d ' ')" "3"
+eq "control: --oneline agrees with it" \
+   "$(git log --oneline "$base"..HEAD | wc -l | tr -d ' ')" "3"
+eq "so the two numbers agree, and a disagreement is the shell, not git" \
+   "$([ "$(git log --format='%h' "$base"..HEAD | wc -l)" \
+        = "$(git rev-list --count "$base"..HEAD)" ] && echo agree || echo differ)" "agree"
+cd / || exit 1
+
+# ---------------------------------------------------------------------------
+# `ls -d A B 2>/dev/null` exits 2 when EITHER path is missing, while still
+# printing the one that exists.
+#   session-pending, the installed-skill check.
+# ---------------------------------------------------------------------------
+echo
+echo "checking two paths with one ls"
+
+lsd=$(mktemp -d) || halt "could not make a fixture directory"
+keep "$lsd"
+mkdir -p "$lsd/present"
+
+ls -d "$lsd/present" "$lsd/absent" >/dev/null 2>&1
+eq "ls -d over one present and one absent path exits 2" "$?" "2"
+eq "while still printing the one that is there" \
+   "$(ls -d "$lsd/present" "$lsd/absent" 2>/dev/null | wc -l | tr -d ' ')" "1"
+
+ls -d "$lsd/present" >/dev/null 2>&1
+eq "control: the same ls over only the present path exits 0" "$?" "0"
+
+mkdir -p "$lsd/second"
+ls -d "$lsd/present" "$lsd/second" >/dev/null 2>&1
+eq "control: and over two present paths it also exits 0" "$?" "0"
+eq "control: printing both" \
+   "$(ls -d "$lsd/present" "$lsd/second" 2>/dev/null | wc -l | tr -d ' ')" "2"
+cd / || exit 1
 echo
 [ "$skips" -gt 0 ] && printf '%s claims skipped for want of an optional tool or shell feature\n' "$skips"
 if [ "$fails" -eq 0 ]; then
