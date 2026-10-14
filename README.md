@@ -17,6 +17,8 @@ answer:
 - `@{upstream}` resolving happily against a branch deleted on the server
 - a deploy pipeline printing `✓ Deployment complete.` beside
   `Skipping app-directory sync`
+- a reconciliation band that reads *more* comfortably as the fault it guards
+  against gets worse
 - a host answering `200` for an identifier that does not exist
 - a test asserting a refusal, green against a parser with no refusal in it
 - `git branch --show-current` printing the wrong branch and exiting 0, so the
@@ -97,6 +99,7 @@ not what is *true*.
 | [`verify-deploy-landed`](verify-deploy-landed/) | Query the live service, not the pipeline's exit code. Publish is not rollout |
 | [`verify-pasted-url`](verify-pasted-url/) | Can a stranger open it, and can a machine confirm it — before you store it |
 | [`mutation-test-guards`](mutation-test-guards/) | Delete the guard and watch a test named for it go red. Otherwise it is decorative |
+| [`verify-derived-figures`](verify-derived-figures/) | A rate whose two sources are at different vintages is wrong by about `1/N` — small enough to look like data |
 
 ### Working on a change
 
@@ -121,11 +124,14 @@ not what is *true*.
 what was skipped and why, and what has not been read. Skips are kept
 deliberately — an undocumented skip gets relitigated every time.
 
-Three imports replaced whole families rather than single skills:
+Four imports replaced whole families rather than single skills, or distilled one
+idea out of a project pipeline:
 
 - `update-url-dependency` ← **9** `update-*` skills, 23 files
 - `verify-pasted-url` and `mutation-test-guards` ← **4** `place-*` skills, 1009 lines
 - `triage-test-failures` and `verify-deploy-landed` ← the release skills of one project
+- `verify-derived-figures` ← one section of a 428-line project pipeline, read on
+  the sweep that was meant only to record why it would be skipped
 
 The survey also records the method: **recency and size pick the wrong copy** of
 a diverged skill — the newest and longest was an adapted instance, not a better
@@ -177,6 +183,7 @@ What is covered, and the measurement each section turns on:
 | `commit-in-shared-checkout`, the push half | a bare `git push` publishing the branch `HEAD` is on while your own commit stays unpushed, against a named refspec that ignores `HEAD`; `git config --get` reporting the value you set while `push` acts on the global one; a rejected push leaving the remote-tracking ref untouched |
 | `session-pending` | `ls -d` over one present and one absent path exiting **2** while still printing the one that is there |
 | `commit-in-shared-checkout`, the range direction | `origin/main..HEAD` against `HEAD..origin/main` — the reversed form is empty in exactly the case the guard is for |
+| `verify-derived-figures` | a denominator one period stale inflating twenty values by `3.2–4.8%` while the ranking moves two places and the leaders do not change; the asymmetric vintage gate in all three directions; an adjacent band moving `4.2` points *further inside* its range under the fault |
 
 Positive controls throughout, for one reason: a probe that cannot see a branch
 which *is* on the remote proves nothing by failing to see one that is not. They

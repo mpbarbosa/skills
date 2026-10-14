@@ -73,6 +73,7 @@ the imported set and the vendored set, or the same inflation returns.
 | `resolve-npm-deprecations` | `guia_js/.github/skills/validate-node-modules` | renamed; **npm-specific** |
 | `commit-in-shared-checkout` | distilled from `trilhas_estudos` `encerrar-branch` | sections 5–7 of it; the rest was already here |
 | `enumerate-a-batch` | distilled from `linkedin` `triagem-n8n` | the enumeration discipline; the pipeline stayed behind |
+| `verify-derived-figures` | distilled from `portal_brasileirao` `rodada-update` | one section of 428; the football stayed behind |
 
 ### Choosing among diverged copies
 
@@ -481,7 +482,31 @@ being burned. Read the short ones anyway; it is cheap.
   `commit-in-shared-checkout` section 5; `cwd` joins the working tree, `HEAD`
   and the index in that skill's opening list.
 
-### Recommended for import, not yet taken
+### Taken, on 2026-10-14 — `verify-derived-figures`
+
+The recommendation below was followed. What came across is the discipline; the
+football, the scripts, the five files and the twenty-club palette stayed behind.
+Ten sections, and **the numbers were rebuilt rather than copied**: a 20-unit
+model with persistent strength plus noise, which is what makes the fault
+invisible, and the arithmetic reproduces the project's real figure closely
+enough to confirm the mechanism — mean inflation **4.1%** against their **4.4%**.
+
+Rebuilding paid for itself twice. It turned the quoted percentage into a **law**:
+the error is approximately **`1/N`**, so it is 4% over 24 periods, 1% over 100,
+and 0.3% over a year of days — **the longer the series, the better the fault
+hides, and the more trusted the number is because it has been stable for
+months.** That is a stronger statement than any single percentage.
+
+And the first attempt at the fixture **failed to reproduce the project's
+observation**: with per-period values drawn independently, the ranking shuffled
+11 of 20 places and the leaders changed, contradicting their "right-looking
+ranks". The defect was the model, not the claim — real units have persistent
+strength, so between-unit spread dominates within-unit noise. With that fixed:
+ranks move **2 of 20** and the top five are identical. A fixture that does not
+model the thing cannot test the claim, and the honest reading of the first run
+was "my model is wrong", not "their observation is wrong".
+
+The original recommendation, kept for the record:
 
 **`rodada-update`: a rate whose numerator and denominator come from sources at
 different vintages.** Its scouts sync divides one feed's counters by match
@@ -504,6 +529,36 @@ would come with it: **"check from" is a floor, not an appointment** — the
 measured lag from a round's last kickoff to the publish that first carried it
 was 1.6–1.7 days on five of six rounds, so poll daily from that date rather than
 once on it.
+
+**What reading it properly turned up, beyond the recommendation.** The skill held
+more than the one finding, and the best of it was not the one that prompted the
+import:
+
+- **A number that moves in the flattering direction as a fault grows is not a
+  gate against that fault.** An adjacent goals-reconciliation band was available
+  as cover for the vintage fault, and under that exact fault it moves *further
+  inside* its range — rebuilt here, `4.2` points inward. It would have been
+  cited as reassurance. This is now the skill's central section, and it is
+  `mutation-test-guards` applied to a number instead of a test.
+- **The gate must be asymmetric.** A numerator *behind* the denominator is not a
+  fault — it is the feed not having recorded something yet, honestly reported.
+  Refusing both directions makes the gate fire in normal operation, and a gate
+  that cries wolf gets removed.
+- **Absent is not zero**, and the conflation runs both ways — the same shape as
+  this repository's own `d4f3f4d`, "Record the zero that means the probe never
+  ran".
+- **A window derived from your own timestamps misses rows** when the upstream
+  indexes by local date and you store UTC. Widen by one period each side — which
+  is only safe because the write is a merge, so fix the write first.
+- **Partial success is the interesting exit**, not a reason to re-run: output
+  written plus a non-zero status means some records did not reconcile.
+- **Throttling that happens at the socket** — no `429`, no `Retry-After` — is
+  indistinguishable from the host being down, so the sleep is load-bearing.
+
+The lesson for the method: this sweep was scoped to *record why these would be
+skipped*. Two of the ten turned out to carry more than the eight others
+combined, and the richest material was three quarters of the way down a
+428-line file about football fixtures. **Triage by description is not reading.**
 
 ### Notes kept on the skips
 

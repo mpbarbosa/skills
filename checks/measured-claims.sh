@@ -1627,6 +1627,97 @@ eq "control: once pushed, the correct range is zero too" \
 eq "control: and its guard now says go" \
    "$([ -z "$(git log --oneline origin/main..HEAD)" ] && echo safe || echo stop)" "safe"
 cd / || exit 1
+# ---------------------------------------------------------------------------
+# A figure divided by a denominator one period stale.
+#   verify-derived-figures 1 (the error is about 1/N), 2 (no sanity check sees
+#   it), 3 (the asymmetric vintage gate), 4 (an adjacent band that improves as
+#   the fault grows). The skill's 4.3-4.5% belongs to one project's real data
+#   and is not re-measured; the arithmetic is.
+# ---------------------------------------------------------------------------
+echo
+echo "a rate whose denominator is one period behind"
+
+if ! command -v python3 >/dev/null 2>&1; then
+  skip "derived-figure claims" "python3 is not installed, and the fixture is arithmetic"
+else
+  vt=$(mktemp -d) || halt "could not make a fixture directory"
+  keep "$vt"
+  cat > "$vt/vintage.py" <<'PYVINT'
+import random
+random.seed(7)
+N = 24
+CLUBS = ["club%02d" % i for i in range(20)]
+# Persistent strength plus noise: between-unit spread >> within-unit variation,
+# which is what makes the ranking stable and the fault invisible.
+strength = {c: 8 + i * 0.6 for i, c in enumerate(CLUBS)}
+inc = {c: [max(0, round(random.gauss(strength[c], 1.5))) for _ in range(N + 1)]
+       for c in CLUBS}
+tot = lambda c, k: sum(inc[c][:k])
+
+right = {c: tot(c, N) / N for c in CLUBS}        # both sides at period N
+wrong = {c: tot(c, N + 1) / N for c in CLUBS}    # numerator at N+1, denominator N
+
+infl = sorted((wrong[c] / right[c] - 1) * 100 for c in CLUBS)
+rk = lambda d: [c for c, _ in sorted(d.items(), key=lambda kv: (-kv[1], kv[0]))]
+a, b = rk(right), rk(wrong)
+
+print("INFL_MIN %.1f" % infl[0])
+print("INFL_MAX %.1f" % infl[-1])
+print("INFL_MEAN %.1f" % (sum(infl) / len(infl)))
+print("ONE_OVER_N %.1f" % (100.0 / N))
+print("RANKS_MOVED %d" % sum(1 for i, c in enumerate(a) if b[i] != c))
+print("TOP5_SAME %s" % ("yes" if a[:5] == b[:5] else "no"))
+print("IN_SPREAD %s" % ("yes" if all(
+    min(right.values()) <= v <= max(right.values()) * 1.1
+    for v in wrong.values()) else "no"))
+
+# The asymmetric vintage gate.
+for num, den in ((N, N), (N + 1, N), (N - 1, N)):
+    print("GATE_%d_%d %s" % (num, den, "REFUSE" if num > den else "ok"))
+
+# An adjacent reconciliation band, offered as cover for the same fault.
+SNAP, FEED, PER = 600, 540, 25
+sf = lambda f: (SNAP - f) / SNAP * 100
+print("BAND_HEALTHY %.1f" % sf(FEED))
+print("BAND_FAULT %.1f" % sf(FEED + PER))
+print("BAND_HEALTHY_INSIDE %s" % ("yes" if -2 <= sf(FEED) <= 15 else "no"))
+print("BAND_FAULT_INSIDE %s" % ("yes" if -2 <= sf(FEED + PER) <= 15 else "no"))
+print("BAND_MOVED_INWARD %.1f" % (sf(FEED) - sf(FEED + PER)))
+PYVINT
+
+  if ! python3 -I "$vt/vintage.py" > "$vt/out" 2>"$vt/err"; then
+    skip "derived-figure claims" "the fixture did not run: $(head -1 "$vt/err")"
+  else
+    v() { awk -v k="$1" '$1==k{print $2}' "$vt/out"; }
+
+    # Positive control: the fixture produced numbers at all.
+    eq "control: the fixture reported every key it should" \
+       "$(wc -l < "$vt/out" | tr -d ' ')" "15"
+
+    eq "the inflation is about 1/N, not a wild number" "$(v INFL_MEAN)" "4.1"
+    eq "and 1/N for this N is the neighbouring value" "$(v ONE_OVER_N)" "4.2"
+    eq "it is tight across the twenty units — min" "$(v INFL_MIN)" "3.2"
+    eq "and max, so there is no outlier to notice" "$(v INFL_MAX)" "4.8"
+
+    eq "the ranking barely moves, so a spot-check passes" "$(v RANKS_MOVED)" "2"
+    eq "and the leaders are identical" "$(v TOP5_SAME)" "yes"
+    eq "every corrupted value sits inside the healthy spread" "$(v IN_SPREAD)" "yes"
+
+    eq "the vintage gate passes when both sides agree" "$(v GATE_24_24)" "ok"
+    eq "refuses a numerator reaching past the denominator" "$(v GATE_25_24)" "REFUSE"
+    eq "and allows a numerator behind it — the asymmetry" "$(v GATE_23_24)" "ok"
+
+    eq "control: the adjacent band is inside its range when healthy" \
+       "$(v BAND_HEALTHY_INSIDE)" "yes"
+    eq "and still inside it under the fault, so it catches nothing" \
+       "$(v BAND_FAULT_INSIDE)" "yes"
+    eq "the fault moves that band further INSIDE, by this many points" \
+       "$(v BAND_MOVED_INWARD)" "4.2"
+    eq "which is to say it reads better as the fault grows — healthy" \
+       "$(v BAND_HEALTHY)" "10.0"
+    eq "against faulty" "$(v BAND_FAULT)" "5.8"
+  fi
+fi
 echo
 [ "$skips" -gt 0 ] && printf '%s claims skipped for want of an optional tool or shell feature\n' "$skips"
 if [ "$fails" -eq 0 ]; then
