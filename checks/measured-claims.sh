@@ -1584,6 +1584,49 @@ eq "control: and over two present paths it also exits 0" "$?" "0"
 eq "control: printing both" \
    "$(ls -d "$lsd/present" "$lsd/second" 2>/dev/null | wc -l | tr -d ' ')" "2"
 cd / || exit 1
+# ---------------------------------------------------------------------------
+# The two refs of a range, and which order answers "what would I lose".
+#   commit-in-shared-checkout 9, "the order of the two refs decides whether that
+#   check is real". Distilled from update-submodules, which guards a destructive
+#   submodule reset with it.
+# ---------------------------------------------------------------------------
+echo
+echo "the direction of a commit range"
+
+rg1=$(mktemp -d) || halt "could not make a fixture directory"
+keep "$rg1"
+git init -q --bare "$rg1/origin.git" || halt "git init --bare failed"
+git init -q -b main "$rg1/work"      || halt "git init failed"
+cd "$rg1/work"                       || halt "could not enter the fixture"
+git config user.email checks@example.invalid
+git config user.name  checks
+git remote add origin "$rg1/origin.git"
+git commit -q --allow-empty -m base
+git push -q origin main || halt "the fixture push failed"
+git fetch -q origin
+
+# Two commits that exist here and nowhere else.
+git commit -q --allow-empty -m "local work 1"
+git commit -q --allow-empty -m "local work 2"
+
+eq "the correct direction counts the commits only you have" \
+   "$(git rev-list --count origin/main..HEAD)" "2"
+eq "the reversed direction counts zero — the false-safe" \
+   "$(git rev-list --count HEAD..origin/main)" "0"
+
+eq "so a guard on the correct range stops" \
+   "$([ -z "$(git log --oneline origin/main..HEAD)" ] && echo safe || echo stop)" "stop"
+eq "and a guard on the reversed range says go, with work to lose" \
+   "$([ -z "$(git log --oneline HEAD..origin/main)" ] && echo safe || echo stop)" "safe"
+
+# Positive control: the correct form is not merely always-stop.
+git push -q origin main || halt "the fixture could not push"
+git fetch -q origin
+eq "control: once pushed, the correct range is zero too" \
+   "$(git rev-list --count origin/main..HEAD)" "0"
+eq "control: and its guard now says go" \
+   "$([ -z "$(git log --oneline origin/main..HEAD)" ] && echo safe || echo stop)" "safe"
+cd / || exit 1
 echo
 [ "$skips" -gt 0 ] && printf '%s claims skipped for want of an optional tool or shell feature\n' "$skips"
 if [ "$fails" -eq 0 ]; then

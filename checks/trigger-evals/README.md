@@ -40,10 +40,31 @@ was not the descriptions: `claude -p` was failing with
 
     Failed to authenticate: OAuth session expired and could not be refreshed
 
-and the harness discards its subprocess's `stderr` and does not check its exit
-status, so a run that never happened is indistinguishable from a description
-that never fires. The measured shape of that is now in
+and the harness does not check its subprocess's exit status, so a run that never
+happened is indistinguishable from a description that never fires. The measured
+shape of that is now in
 [`mutation-test-guards`](../../mutation-test-guards/).
+
+**Re-measured 2026-10-14, and the diagnosis above was wrong in the part that
+decides the fix.** Auth is still expired, so the measurement still cannot be
+taken — but the failure does not behave as described:
+
+    claude -p 'Reply with exactly: AUTHOK'   -> exit 1
+      stdout: Failed to authenticate: OAuth session expired and could not be refreshed
+      stderr: Warning: no stdin data received in 3s, proceeding without it.
+
+Three corrections. The auth failure goes to **stdout**, not `stderr`, so
+"discards `stderr`" was never what hid it — the harness read the failure text as
+the model's answer, found no skill invocation in it, and scored `0.0`. The exit
+status **is** `1`, so checking it is a sufficient and cheap guard, rather than
+the subtle problem the paragraph implied. And `stderr` carried an unrelated
+warning: `claude -p` waits on stdin for 3s, so run it with `< /dev/null` or each
+query pays that delay. Measured over 14 queries x 3 runs that is a little over
+two minutes of pure waiting: the same call took **3s** with `< /dev/null` and
+**6s** without.
+
+Not asserted in `measured-claims.sh`, deliberately: it is a measurement of this
+machine's expired credentials and would invert the day someone logs in.
 
 **So before trusting any number out of this, run a control that must trigger.**
 If the control reports zero, the harness is what you have measured. The result

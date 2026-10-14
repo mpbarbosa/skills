@@ -52,6 +52,12 @@ pre-audit text, still carrying the `pgrep` form and the bare `ss -ltn` that
 copy was the version with the defect in it. Re-run the loop above to replace a
 copy with a link.
 
+That install is now entirely symlinks. The last copy was `grill-with-docs`,
+which is not from this collection — it was byte-identical to the vendored
+upstream at `third_party/skills/skills/engineering/grill-with-docs` (a checkout
+of `mattpocock/skills`), so it had not drifted, and linking it there while the
+two still agreed was the cheap moment to do it.
+
 ### Scoped to this repository
 
 `commit-in-shared-checkout` is also linked at
@@ -170,6 +176,7 @@ What is covered, and the measurement each section turns on:
 | `enumerate-a-batch` | two live windows covering the right *count* and the wrong contents, against one snapshot sliced locally; a handed id absent from the whole query said to have produced it; a sentinel-value probe and a pipeline broken after stage 1 returning the same status |
 | `commit-in-shared-checkout`, the push half | a bare `git push` publishing the branch `HEAD` is on while your own commit stays unpushed, against a named refspec that ignores `HEAD`; `git config --get` reporting the value you set while `push` acts on the global one; a rejected push leaving the remote-tracking ref untouched |
 | `session-pending` | `ls -d` over one present and one absent path exiting **2** while still printing the one that is there |
+| `commit-in-shared-checkout`, the range direction | `origin/main..HEAD` against `HEAD..origin/main` — the reversed form is empty in exactly the case the guard is for |
 
 Positive controls throughout, for one reason: a probe that cannot see a branch
 which *is* on the remote proves nothing by failing to see one that is not. They
@@ -282,9 +289,13 @@ That needs evals, not assertions.
 [`checks/trigger-evals/`](checks/trigger-evals/) holds a labelled query set for
 the first half of that — one set of 14 queries labelled three ways, so running
 all three measures whether the overlapping session-* descriptions discriminate.
-It has never produced a measurement here, and its README says why: `claude -p`
-was unauthenticated, and the harness reports a failed run and a description that
-never fires as the same `0.0`.
+It has still never produced a measurement, because `claude -p` is still
+unauthenticated here — but re-measuring the failure on 2026-10-14 corrected the
+account of it in the part that decides the fix. The auth error goes to
+**stdout**, not `stderr`, so the harness scored it as the model's answer; and
+the process **does** exit `1`, so checking the status is a sufficient guard
+rather than a subtle one. Details in that directory's README. Running it needs
+someone to log in; nothing in the repository can supply that.
 
 They run in CI on every push and pull request
 ([`.github/workflows/checks.yml`](.github/workflows/checks.yml)), because a

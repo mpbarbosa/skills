@@ -5,10 +5,10 @@ description: Commit and push safely in a checkout that other agents and the user
 
 # Committing in a checkout someone else is editing
 
-In a checkout shared by several agents and a person, three things you would
-normally treat as yours are not: **the working tree, `HEAD`, and the index.**
-All three are process-global and all three move between any two commands you
-run.
+In a checkout shared by several agents and a person, four things you would
+normally treat as yours are not: **the working tree, `HEAD`, the index, and the
+directory your shell is in.** All four are process-global and all four move
+between any two commands you run.
 
 The consequence is specific, and it is not "merge conflicts". It is that
 `git commit` succeeds, exits 0, prints a plausible summary, and records
@@ -178,7 +178,27 @@ message is the failure; shipping them with attribution is merely untidy.
 `unrelated.txt` — a file no one had staged and you never named — alongside
 `shared.md`. In a shared checkout, do not use it.
 
-## 5. A loaded index is itself the hazard
+## 5. Check `pwd` before a relative path, not once at the start
+
+The directory your shell is in is the fourth piece of shared state, and it moves
+without telling you — a harness can reset it between two of your commands, and
+this transcript has had `Shell cwd was reset to …` appear between consecutive
+calls. A relative path then resolves against a tree you did not mean.
+
+Recorded in the project this came from: a shell whose directory had silently
+reset to the root checkout wrote two generated files into the wrong tree in one
+session. **The tell was `git status` in the root showing edits nobody made
+there** — which is worth knowing, because that is also what another session's
+work looks like, and the two have opposite remedies.
+
+Absolute paths cost nothing here. Where a command must be relative, print `pwd`
+in the same invocation rather than trusting the last one you saw:
+
+```sh
+[ "$(pwd)" = "$(git rev-parse --show-toplevel)" ] && ./scripts/generate
+```
+
+## 6. A loaded index is itself the hazard
 
 Every failure above lives in the window between `git add` and `git commit`, and
 that window belongs to every session in the checkout. So stage and commit in
@@ -189,7 +209,7 @@ choice between the two defences is made by the file, not by how clean the index
 is. In a file another session also edited, `git commit -- PATH` against an empty
 index still commits that whole file from the tree, their lines included.
 
-## 6. Do not reach for `git stash`
+## 7. Do not reach for `git stash`
 
 When `git switch` is blocked by uncommitted files, `git stash` is the obvious
 move and it is the wrong one here: those files may be another session's
@@ -211,14 +231,14 @@ For running a test baseline without disturbing the tree — the other common
 reason to reach for `stash` — use a detached worktree instead; see
 [`triage-test-failures`](../triage-test-failures/).
 
-## 7. After the fact
+## 8. After the fact
 
 If the mixed commit is still local, fix it. If it has been pushed in a checkout
 other sessions pull from, **do not rewrite it** — published history that others
 have is worth more than correct attribution. Tell the session whose work you
 carried, so it does not commit the same lines a second time.
 
-## 8. The commit is not the backup, and `git push` repeats failure 1
+## 9. The commit is not the backup, and `git push` repeats failure 1
 
 A commit in a shared checkout moves the work from *one process* to *one disk*.
 Until it is on the server it still exists in a single place, and every finding
@@ -290,6 +310,20 @@ git diff --stat origin/main..main
 git rev-list --count origin/main..main    # does the count match the lines?
 ```
 
+**The order of the two refs decides whether that check is real.**
+`origin/main..main` lists commits that are here and not on the server — the ones
+a push would publish and a reset would destroy. Reversed, it answers the
+opposite question and is **empty in exactly the case you are checking for**.
+Verified, with two unpushed commits:
+
+    git log origin/main..HEAD   -> 2    guard says: stop, 2 unpushed
+    git log HEAD..origin/main   -> 0    guard says: safe to reset   <- WRONG
+
+Control, after pushing: `origin/main..HEAD` is `0` too, so the correct form is
+not merely always-stop. A guard written on the reversed range reports "nothing
+to lose" precisely when there is something to lose, and that is the direction
+that costs you the work.
+
 **Count the lines against `rev-list --count`, because something between you and
 `git` can drop one.** Measured, in a shell where a token-reducing wrapper
 rewrites `git` through a hook: the `--format` log above printed **2** commits
@@ -326,7 +360,7 @@ the same lesson being overstated as law:
 |---|---|
 | `git branch --show-current &&` recommended as a guard | written without ever being run |
 | `git commit -- PATH` called "the defence" for section 2 | two axes tested, the third not imagined |
-| "section 5 makes the section 3 table unnecessary" | generalising a defence that worked |
+| "the loaded-index corollary makes the section 3 table unnecessary" | generalising a defence that worked |
 
 The middle one is the instructive one, because the sentence *"verified in an
 isolated repository"* was already in the text and was **true** — the axis that

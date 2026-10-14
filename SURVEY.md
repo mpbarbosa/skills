@@ -5,7 +5,7 @@ A record of which skills in the sibling repositories under
 sweep **re-confirms rather than re-litigates**. Skips are as much a result as
 imports; an undocumented skip gets reassessed from scratch every time.
 
-Last surveyed: **2026-10-13** — the three repositories named in that
+Last surveyed: **2026-10-14** — the three repositories named in that
 sweep's "not yet assessed" list plus `trilhas_estudos`, which the earlier counts
 had missed entirely.
 
@@ -29,8 +29,8 @@ find . -maxdepth 6 -name SKILL.md \
 | Names with more than one copy | 27 |
 | …of those, copies that have **diverged** | 22 |
 | …of those, a **vendored third-party collection** (see below) | 29 |
-| **Names assessed so far** | **75** |
-| **Names not yet read in full — and yours** | **11** |
+| **Names assessed so far** | **75**, and as of 2026-10-14 every first-party name in the corpus |
+| **Names not yet read in full — and yours** | **0** (was 11; see the two sweeps below) |
 
 Re-measured on 2026-10-13 with the same command: **168** files, **97** distinct
 names, **31** repositories. The table above is the 2026-09-28 snapshot and is
@@ -176,10 +176,10 @@ Worth revisiting if the stated condition changes.
 
 ## Not yet assessed
 
-**10 first-party names**, triaged by description but not read in full —
-`triagem-n8n` left this list on 2026-10-13, read in full and distilled into
-`enumerate-a-batch`. The figure remains unreliable in the other direction: the
-three `trilhas_estudos` names were never counted, so treat it as a floor:
+**None.** This list is empty as of 2026-10-14 — all ten were read in full and
+their verdicts are in the 2026-10-14 sweep below. The buckets are kept because
+the triage they record turned out to be **wrong about two of the ten**, which is
+the argument for reading rather than triaging:
 
 | Bucket | Names |
 |---|---|
@@ -430,6 +430,107 @@ Project-bound. Three general observations, of which one was worth keeping:
 `SKILL.md` anywhere in the repository. Its practices live in `README.md` and
 `ROADMAP.md`, which are not in this corpus. Re-confirm by looking for the
 directory, not by searching for files.
+
+## The 2026-10-14 sweep: the last 10 unassessed names
+
+The "not yet assessed" list is now **empty**. All ten were read in full, and the
+triage-by-description that stood in for reading them was **wrong about the two
+that mattered** — the two largest, both filed as *project-bound* and therefore
+uninteresting, carry more measured failures than the other eight together.
+
+A cheap way to find that out, before reading 1 700 lines: count the markers a
+measured failure leaves behind.
+
+```sh
+grep -ciE 'verificad|verified|measured|medido|armadilha|⚠️|exits? 0|silenc|silent' SKILL.md
+```
+
+| Skill | Repo | Lines | Markers | Verdict |
+|---|---|---|---|---|
+| `rodada-update` | portal_brasileirao | 428 | **13** | skip; **two findings**, one recommended for import |
+| `campanha-video` | portal_brasileirao | 349 | **12** | skip; one finding folded out |
+| `fix-preflight-log-issues` | olinda_copilot_sdk.ts | 239 | 3 | skip — persistent |
+| `next-roadmap-step` | paraty_geoservices | 176 | 0 | skip — persistent |
+| `update-submodules` | ai_workflow.js-revive-… | 134 | 0 | skip; **one finding folded out** |
+| `find-highlights` | portal_brasileirao | 123 | 1 | skip — superseded |
+| `ai-workflow-scaffold` | mapasp | 95 | 1 | skip — persistent |
+| `docker-test-fix` | olinda_orchestrator | 52 | 0 | skip — superseded |
+| `analytics` | tokentop | 44 | 0 | skip — persistent |
+| `ship` | articles | 39 | 0 | skip — superseded |
+
+**The marker count is a useful signal and not a sufficient one.**
+`update-submodules` scored **0** and still carried the best single finding of the
+ten, because it was written as a careful explanation rather than as a record of
+being burned. Read the short ones anyway; it is cheap.
+
+### Folded out, and asserted
+
+- **`update-submodules` — a reversed commit range is a false-safe.** It guards a
+  destructive submodule reset by listing commits that would be orphaned, and
+  warns that the range must be `origin/main..HEAD`: reversed, it answers the
+  opposite question and is **empty in exactly the case being checked for**.
+  Verified with two unpushed commits — `2` the right way, `0` reversed, and a
+  control showing the correct form is not merely always-stop. Now in
+  `commit-in-shared-checkout` section 9, with assertions.
+- **`campanha-video` — the shell's directory is shared mutable state too.**
+  "Check `pwd` before a relative-path command, not once at the start." A shell
+  whose directory had silently reset to the root checkout wrote two generated
+  files into the wrong tree in one session, and **the tell was `git status` in
+  the root showing edits nobody made there** — which is also what another
+  session's work looks like, and the two have opposite remedies. Now
+  `commit-in-shared-checkout` section 5; `cwd` joins the working tree, `HEAD`
+  and the index in that skill's opening list.
+
+### Recommended for import, not yet taken
+
+**`rodada-update`: a rate whose numerator and denominator come from sources at
+different vintages.** Its scouts sync divides one feed's counters by match
+counts bounded by another feed's snapshot. When the snapshot lags by one round,
+**every club's figure inflated 4.3–4.5%, mean 4.4% — and nothing about the
+output looks wrong.** Twenty plausible rates, the right-looking ranks. Measured
+by reproducing it one round early against data already on disk.
+
+It carries its own two gates, which is what makes it skill-shaped rather than an
+anecdote: the sync refuses when the numerator's round exceeds the snapshot's last
+completed round, and the coverage denominator throws on the same fault from the
+other side — two independent guards on one fault. **The gate then fired for real
+on rodada 25**, caRtola at 25 against a seed at 24, and named both rounds.
+
+This is on-criterion and nothing here covers it. It is left as a recommendation
+rather than an import because it would be a new skill — a naming and scoping
+decision — and the shape generalises well beyond football: any metric joining
+two datasets that refresh independently. A second finding from the same skill
+would come with it: **"check from" is a floor, not an appointment** — the
+measured lag from a round's last kickoff to the publish that first carried it
+was 1.6–1.7 days on five of six rounds, so poll daily from that date rather than
+once on it.
+
+### Notes kept on the skips
+
+- `ship` (articles) reaches **the same conclusion as
+  `commit-in-shared-checkout` independently** — "prefer explicit paths over
+  `git add -A` so nothing sneaks in" — and greps the diff for conflict markers,
+  as `triage-test-failures` now does. But its push step is `git push`, falling
+  back to `git push -u origin <branch>`, which is exactly the bare-push failure
+  that skill's section 9 measures. Superseded rather than merely project-bound.
+- `analytics` (tokentop) is procedure plus API facts, with one measurement
+  caveat worth naming and not importing: Homebrew and Scoop install counts are
+  **approximated from git clone counts** on the tap repositories, and the
+  GitHub traffic API keeps only 14 days. A proxy presented in the same table as
+  a direct count.
+- `fix-preflight-log-issues` carries one habit worth having: **verify a logged
+  issue still reproduces against the live repository before fixing it**, and
+  treat one that does not as historical noise. It is bound to
+  `.ai_workflow/logs/` and joins the nine already skipped for that.
+- `docker-test-fix` is confirmed superseded: pure procedure, and the one general
+  trap the earlier sweep attributed to `docker-test` is already in
+  `triage-test-failures`.
+- `find-highlights` is the `place-*` family again, one repository over.
+  `verify-pasted-url` holds its transferable half.
+- `next-roadmap-step` is `next-roadmap-phase` under another name, bound to the
+  same `CHANGELOG.md` / backlog convention.
+- `ai-workflow-scaffold` writes `.workflow-config.yaml` and the
+  `ai_workflow.js` document set. The tenth member of that family.
 
 ## What makes a skill worth importing
 
