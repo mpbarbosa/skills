@@ -432,6 +432,13 @@ Project-bound. Three general observations, of which one was worth keeping:
 `ROADMAP.md`, which are not in this corpus. Re-confirm by looking for the
 directory, not by searching for files.
 
+> **Still true as written, and it was the wrong question.** On 2026-10-21 this
+> repository produced [`verify-diagram-claims`](verify-diagram-claims/) — not
+> from a `SKILL.md` it did not have, but from a day's work *inside* it, where
+> drawing six diagrams found two defects and an existing diagram turned out to
+> describe a module nothing calls. A corpus search for skill files cannot see a
+> practice that has never been written down. See the section below.
+
 ## The 2026-10-14 sweep: the last 10 unassessed names
 
 The "not yet assessed" list is now **empty**. All ten were read in full, and the
@@ -604,3 +611,54 @@ wrapper, `@{upstream}` resolving against a deleted branch, `git branch -d`
 succeeding on an unmerged branch, an unanchored version replacement corrupting
 `0.4.20`. A skill that records what actually went wrong is one someone learned
 from; a skill that only lists steps is usually a procedure for one repo.
+
+## 2026-10-21 — a skill from work, not from a sweep
+
+`verify-diagram-claims` did not come from anyone's `SKILL.md`. It came from one
+day in two repositories — `twowayflow` and `conversando_com_pessoa` — in which
+**eleven diagram and projection artifacts** were produced: an assessment of what
+notation each project was missing, a sequence diagram, a service topology, a
+trust-boundary DFD, a decision table, two UML extractions, two dataflow
+projections and a folder index.
+
+The entry criterion is met by the part that was **not** the drawing:
+
+- An `erDiagram` already in one repository described five tables in a database
+  **that does not exist** — the feature was unbuilt and nothing in the source
+  imported a driver for it. It was also the only answer anyone had to "what is
+  the data model".
+- A dataflow projection asserted that the pipeline *«retrieves densely and
+  lexically, fuses by reciprocal rank»*. A module did exactly that, correctly,
+  with a passing test — and **the AST import graph had no edge into it from any
+  product module**, its only importers being under `tests/`. The diagram was
+  true of a file and false of the system, and it had been read by people who
+  knew the code.
+- A third diagram existed only because a dataflow graph **structurally could
+  not** carry the claim: edges are data dependencies, there are no lifelines, so
+  "the fragments of a rejected attempt have already left the process" is not
+  expressible — measured, six of eight verses. The notation, not the drawing,
+  was the defect.
+- **Two of six diagrams found a defect while being drawn**: a decision table
+  found a manifest shape where two implementations of the same five checks
+  disagree and the parity test did not parametrise it, failing in the optimistic
+  direction; an egress diagram found a door already open.
+
+Rebuilt here rather than copied, as `verify-derived-figures` was: a seven-module
+fixture with two entry points and a module that is imported, tested and
+unreachable. Rebuilding turned the project's anecdote into a **two-directional**
+claim, which is the stronger statement — a one-hop importer count reads the dead
+module as live *and* reads both entry points as dead, in the same table.
+
+What stayed behind: the Portuguese, the poems, the systemd units, the project's
+`CONTROLO.md` correction habit, and every file path. What came across is the
+order — inventory, resolve the nodes, choose the notation by its primitive,
+then draw — plus the four-field titleblock, which is a convention of that work
+and is kept because a diagram that travels arrives with no repository attached.
+
+One finding is about the probes rather than the diagrams, and it is in the skill
+because it cost a measurement here: **GNU grep prefixes `./` only when rooted at
+`.`**, so an exclusion written for one form silently excludes nothing in the
+other, leaves the definition in the list, and reports callers for a symbol that
+has none — wrong in the direction that hides the finding. Where a wrapper has
+put a modern search tool behind the name `grep`, the prefix and the ordering
+both change again.

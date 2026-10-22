@@ -1718,6 +1718,224 @@ PYVINT
     eq "against faulty" "$(v BAND_FAULT)" "5.8"
   fi
 fi
+
+# ---------------------------------------------------------------------------
+# A diagram drawn from the source describes code that exists, not code that is
+# reached — and the obvious liveness probe is wrong in both directions.
+#   verify-diagram-claims sections 1, 3, 9 and 10.
+# ---------------------------------------------------------------------------
+echo
+echo "a module that is imported and unreachable, beside one reachable and imported by nothing"
+
+dg=$(mktemp -d) || halt "could not make a fixture directory"
+keep "$dg"
+mkdir -p "$dg/src" "$dg/tests" "$dg/docs" || halt "could not lay out the fixture"
+
+cat > "$dg/src/index.py" <<'PYFIX'
+class DenseIndex:
+    def search(self, q):
+        return ["a", "b"]
+PYFIX
+cat > "$dg/src/bm25.py" <<'PYFIX'
+def score(q, docs):
+    return [1.0 for _ in docs]
+PYFIX
+cat > "$dg/src/search.py" <<'PYFIX'
+from .index import DenseIndex
+from .bm25 import score
+
+def rrf(a, b):
+    return a + b
+
+class HybridSearch:
+    def __init__(self):
+        self.dense = DenseIndex()
+    def search(self, q):
+        return rrf(self.dense.search(q), score(q, []))
+PYFIX
+cat > "$dg/src/generate.py" <<'PYFIX'
+def generate(prompt):
+    yield "verse one"
+PYFIX
+cat > "$dg/src/guard.py" <<'PYFIX'
+def copied(text):
+    return "verse one" in text
+PYFIX
+cat > "$dg/src/pipeline.py" <<'PYFIX'
+from .index import DenseIndex
+from .generate import generate
+from .guard import copied
+
+def answer(q):
+    DenseIndex().search(q)
+    text = "".join(generate(q))
+    return None if copied(text) else text
+PYFIX
+cat > "$dg/src/web.py" <<'PYFIX'
+from .generate import generate
+from .guard import copied
+
+def stream(q):
+    out = []
+    for frag in generate(q):
+        out.append(frag)
+        yield frag
+    if copied("".join(out)):
+        yield "rejected"
+PYFIX
+cat > "$dg/tests/test_search.py" <<'PYFIX'
+from src.search import HybridSearch
+
+def test_hybrid():
+    assert HybridSearch().search("x")
+PYFIX
+{
+  printf '%s\n' '```mermaid' 'flowchart LR'
+  printf '%s\n' '  q[question] --> dense[DenseIndex.search]' '  q --> lex[bm25.score]'
+  printf '%s\n' '  dense --> fuse[rrf]' '  lex --> fuse' '  fuse --> gen[generate]'
+  printf '%s\n' '  gen --> guard[copied]' '  guard --> ans[answer]' '```'
+} > "$dg/docs/diagrams.md"
+
+cd "$dg" || halt "could not enter the diagram fixture"
+
+# The naive existence check, which the drawing survives.
+eq "the symbol the diagram draws really is defined, once" \
+   "$(grep -rc --include='*.py' -E '^[[:space:]]*class[[:space:]]+HybridSearch\b' src |
+      grep -v ':0$' | wc -l | tr -d ' ')" "1"
+
+# One-hop importer counts, wrong in both directions.
+imp() {
+  grep -rlE "from[[:space:]]+\.$1[[:space:]]+import" --include='*.py' src |
+    grep -vx "src/$1.py" | wc -l | tr -d ' '
+}
+eq "bm25 has an importer, so it reads as live" "$(imp bm25)" "1"
+eq "while the module that holds the drawn class has none" "$(imp search)" "0"
+eq "control: a module on the answering path has two" "$(imp index)" "2"
+eq "and an entry point has none, so it reads as dead" "$(imp web)" "0"
+eq "both of them" "$(imp pipeline)" "0"
+
+# The exclusion that excludes nothing. GNU grep prefixes ./ only when rooted at .
+eq "rooted at a directory, no ./ prefix" \
+   "$(grep -rl --include='*.py' -w HybridSearch src tests | sort | head -1)" "src/search.py"
+eq "rooted at dot, every path carries it" \
+   "$(grep -rl --include='*.py' -w HybridSearch . | sort | head -1)" "./src/search.py"
+eq "excluding the definer as the same command printed it leaves only tests" \
+   "$(grep -rl --include='*.py' -w HybridSearch src tests |
+      grep -vx src/search.py | tr '\n' ' ')" "tests/test_search.py "
+eq "the mismatched-prefix exclusion keeps the definer — the finding is hidden" \
+   "$(grep -rl --include='*.py' -w HybridSearch src tests |
+      grep -vc '/src/search\.py$' | tr -d ' ')" "2"
+
+# Reachability from the entry points inward, which is the probe that is right.
+if ! command -v python3 >/dev/null 2>&1; then
+  skip "diagram reachability" "no python3"
+else
+  cat > "$dg/reach.py" <<'PYFIX'
+import ast, os, sys
+from collections import deque
+root, pkg, entries = sys.argv[1], sys.argv[2], sys.argv[3:]
+mods, edges = {}, {}
+for dirpath, _, names in os.walk(os.path.join(root, pkg)):
+    for n in sorted(n for n in names if n.endswith(".py")):
+        p = os.path.join(dirpath, n)
+        mods[os.path.relpath(p, root)[:-3].replace(os.sep, ".")] = p
+for name, p in mods.items():
+    out = set()
+    for node in ast.walk(ast.parse(open(p).read(), p)):
+        if isinstance(node, ast.ImportFrom):
+            base = name.rsplit(".", node.level)[0] if node.level else ""
+            out.add((base + "." + node.module) if (node.level and node.module) else (node.module or base))
+        elif isinstance(node, ast.Import):
+            out.update(a.name for a in node.names)
+    edges[name] = {m for m in out if m in mods}
+seen, q = set(), deque(f"{pkg}.{e}" for e in entries)
+while q:
+    m = q.popleft()
+    if m in seen or m not in mods:
+        continue
+    seen.add(m)
+    q.extend(sorted(edges.get(m, ())))
+print(len(mods), len(seen), " ".join(sorted(set(mods) - seen)) or "(none)")
+PYFIX
+  r=$(python3 -I "$dg/reach.py" . src web pipeline 2>"$dg/err")
+  if [ -z "$r" ]; then
+    skip "diagram reachability" "the probe did not run: $(head -1 "$dg/err")"
+  else
+    eq "seven modules, five reachable from the two entry points" \
+       "$(printf '%s' "$r" | cut -d' ' -f1-2)" "7 5"
+    eq "and the two the diagram draws half its nodes from are not" \
+       "$(printf '%s' "$r" | cut -d' ' -f3-)" "src.bm25 src.search"
+
+    # Mutation: make the code match the drawing. The probe must go clean.
+    cp src/pipeline.py "$dg/pipeline.orig"
+    printf 'from .search import HybridSearch\n' | cat - "$dg/pipeline.orig" > src/pipeline.py
+    eq "mutation: once something imports it, nothing is unreachable" \
+       "$(python3 -I "$dg/reach.py" . src web pipeline | cut -d' ' -f3-)" "(none)"
+    cp "$dg/pipeline.orig" src/pipeline.py
+    eq "and the fixture is back" \
+       "$(python3 -I "$dg/reach.py" . src web pipeline | cut -d' ' -f3-)" "src.bm25 src.search"
+
+    # Control: the entry-point list is the input that decides the answer.
+    eq "control: drop an entry point and its own module goes unreachable" \
+       "$(python3 -I "$dg/reach.py" . src pipeline | cut -d' ' -f3-)" \
+       "src.bm25 src.search src.web"
+  fi
+fi
+
+# Resolving the drawing's nodes: the qualifier is what distinguishes two defs.
+resolve() {
+  label=$1; pre=${label%%.*}; id=${label##*.}
+  if [ "$pre" != "$label" ] && [ -f "src/$pre.py" ]; then echo "src/$pre.py"; return; fi
+  if [ "$pre" != "$label" ]; then
+    f=$(grep -rlE "^[[:space:]]*class[[:space:]]+$pre\b" --include='*.py' src | sort | head -1)
+    [ -n "$f" ] && { echo "$f"; return; }
+  fi
+  grep -rlE "^[[:space:]]*(class|def)[[:space:]]+$id\b" --include='*.py' src | sort | head -1
+}
+eq "seven node labels come out of the mermaid block" \
+   "$(sed -n '/^```mermaid/,/^```/p' docs/diagrams.md |
+      grep -o '\[[^]]*\]' | sed 's/^\[//; s/\]$//' | sort -u | wc -l | tr -d ' ')" "7"
+eq "the qualifier resolves the live node to the module that is reached" \
+   "$(resolve DenseIndex.search)" "src/index.py"
+eq "the trailing identifier alone is ambiguous — sorted, it lands here" \
+   "$(grep -rlE '^[[:space:]]*(class|def)[[:space:]]+search\b' --include='*.py' src |
+      sort | head -1)" "src/index.py"
+eq "control: two modules define a search, which is why the qualifier matters" \
+   "$(grep -rlE '^[[:space:]]*(class|def)[[:space:]]+search\b' --include='*.py' src |
+      wc -l | tr -d ' ')" "2"
+eq "a label that is an input resolves to nothing" "$(resolve question)" ""
+eq "and the drawn step is reached by more callers than the drawing knows" \
+   "$(grep -rl --include='*.py' -w generate src | grep -vx src/generate.py |
+      sort | tr '\n' ' ')" "src/pipeline.py src/web.py "
+
+# The drawn entity against the storage that would have to exist for it.
+eq "nothing in the tree imports a driver for the entities drawn" \
+   "$(grep -rl --include='*.py' -E 'sqlite3|psycopg|sqlalchemy|pymongo' src |
+      wc -l | tr -d ' ')" "0"
+printf 'import sqlite3\n' > "$dg/src/store.py"
+eq "control: the same probe sees one as soon as there is one" \
+   "$(grep -rl --include='*.py' -E 'sqlite3|psycopg|sqlalchemy|pymongo' src |
+      wc -l | tr -d ' ')" "1"
+rm -f "$dg/src/store.py"
+
+# The titleblock lint: silent on a complete block, naming on an incomplete one.
+printf '%s\n' '| Name        retrieval-path |' '| Type        flowchart      |' \
+              '| Project     demo           |' '| Description what runs      |' > docs/good.md
+printf '%s\n' '| Name        retrieval-path |' '| Type        flowchart      |' \
+              '| Description what runs      |' > docs/missing.md
+tb() {
+  miss=''
+  for k in Name Type Project Description; do
+    grep -qE "^.?.? *$k[[:space:]]" "$1" || miss="$miss $k"
+  done
+  printf '%s' "$miss"
+}
+eq "control: a complete titleblock reports nothing missing" "$(tb docs/good.md)" ""
+eq "a dropped field is named" "$(tb docs/missing.md)" " Project"
+eq "and a bare diagram is named four times" "$(tb docs/diagrams.md)" \
+   " Name Type Project Description"
+
+cd / || exit 1
 echo
 [ "$skips" -gt 0 ] && printf '%s claims skipped for want of an optional tool or shell feature\n' "$skips"
 if [ "$fails" -eq 0 ]; then

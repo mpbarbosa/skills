@@ -24,6 +24,8 @@ answer:
 - `git branch --show-current` printing the wrong branch and exiting 0, so the
   `&&` after it commits anyway
 - two pages of a search covering 40 results, 10 of which were not asked for
+- a diagram whose every node names a real symbol and whose every edge is a real
+  call, drawn over a module nothing in the product reaches
 
 Skills that only list steps stayed where they were. So did skills whose value is
 the set of file paths they know.
@@ -100,6 +102,7 @@ not what is *true*.
 | [`verify-pasted-url`](verify-pasted-url/) | Can a stranger open it, and can a machine confirm it — before you store it |
 | [`mutation-test-guards`](mutation-test-guards/) | Delete the guard and watch a test named for it go red. Otherwise it is decorative |
 | [`verify-derived-figures`](verify-derived-figures/) | A rate whose two sources are at different vintages is wrong by about `1/N` — small enough to look like data |
+| [`verify-diagram-claims`](verify-diagram-claims/) | Is the diagram true of the code that *runs*? Nothing executes a drawing, so it is believed |
 
 ### Working on a change
 
@@ -133,6 +136,12 @@ idea out of a project pipeline:
 - `verify-derived-figures` ← one section of a 428-line project pipeline, read on
   the sweep that was meant only to record why it would be skipped
 
+One did not come from a sweep at all. `verify-diagram-claims` was generalised
+from a day's work in two repositories that had no `SKILL.md` between them —
+where drawing six diagrams found two defects, and an existing diagram turned out
+to describe a module nothing calls. A corpus search for skill files cannot see a
+practice nobody has written down yet.
+
 The survey also records the method: **recency and size pick the wrong copy** of
 a diverged skill — the newest and longest was an adapted instance, not a better
 template. Counting how often a copy names its own host repository picks the
@@ -150,8 +159,8 @@ Two of them, neither testing the prose:
   parses, `name` matching the directory, a description that exists and fits,
   code fences that close.
 - [`checks/measured-claims.sh`](checks/measured-claims.sh) — rebuilds the
-  situations the skills quote and re-asserts the numbers they print. **135 of
-  them**, over ten skills.
+  situations the skills quote and re-asserts the numbers they print. **261 of
+  them**, over fifteen skills.
 
 The second one is the point. Those claims are about git, procps, perl and the
 shell, not about this repository, so they can stop being true without anything
@@ -183,6 +192,7 @@ What is covered, and the measurement each section turns on:
 | `commit-in-shared-checkout`, the push half | a bare `git push` publishing the branch `HEAD` is on while your own commit stays unpushed, against a named refspec that ignores `HEAD`; `git config --get` reporting the value you set while `push` acts on the global one; a rejected push leaving the remote-tracking ref untouched |
 | `session-pending` | `ls -d` over one present and one absent path exiting **2** while still printing the one that is there |
 | `commit-in-shared-checkout`, the range direction | `origin/main..HEAD` against `HEAD..origin/main` — the reversed form is empty in exactly the case the guard is for |
+| `verify-diagram-claims` | a module imported, tested and unreachable beside two entry points imported by nothing, so a one-hop count reads both wrong; `./` appearing in a path only when the search is rooted at `.`, so the exclusion that removes the definer removes nothing; a node label resolving to the wrong one of two definitions once the qualifier is dropped |
 | `verify-derived-figures` | a denominator one period stale inflating twenty values by `3.2–4.8%` while the ranking moves two places and the leaders do not change; the asymmetric vintage gate in all three directions; an adjacent band moving `4.2` points *further inside* its range under the fault |
 
 Positive controls throughout, for one reason: a probe that cannot see a branch
