@@ -91,6 +91,43 @@ not as *is its session finished* — no command answers the second. It fails saf
 a worktree holding uncommitted work also reports "never held a commit", and that
 is a reason to leave it alone rather than a reason to doubt the test.
 
+**And it says "not landed" for a branch that squash-merged** — the same test
+failing the other way. A squash merge writes a fresh commit whose only parent is
+the target's own history, so the branch tip is never an ancestor of
+`origin/main` however completely its content landed. Measured six weeks after
+the fact, across fifteen branches a forge had squashed:
+
+    git branch -r --merged origin/main   -> 0 branches
+    gh pr list --state all               -> all 15 of them MERGED
+
+This direction is the safe one — it keeps what it cannot prove — so it costs
+tidiness rather than work, which is exactly why those fifteen sat unnoticed. But
+it means **"not landed" from ancestry is not evidence of anything** once a
+forge squashes, and `git branch -d` refusing the delete (the third row above)
+only agrees with it, because `-d` runs that same ancestry test.
+
+**And you cannot settle it per repository, only per branch.** The merge method
+is chosen at the button, so one project mixes both: in the same repository as
+those fifteen, the very next PR landed as a two-parent merge commit, for which
+ancestry answers correctly. "This project squashes" is not a fact you can cache
+and skip the check with — `git rev-list --parents -n1 <landing commit>` tells
+you which kind you are looking at, one commit at a time.
+
+Ask the forge instead, and ask it two things:
+
+```sh
+gh pr list --state merged --limit 100 --json headRefName,headRefOid \
+  --jq '.[] | "\(.headRefName) \(.headRefOid)"'   # did a PR for it land...
+git rev-parse origin/<branch>                      # ...and is the tip still it?
+```
+
+The second line is the one that is easy to drop and the one that matters. A
+merged PR says the commit the forge *squashed* is in, not that the branch has
+nothing newer on it; anything pushed after the merge is in no squashed commit.
+Nothing refuses on your behalf there either — `git push origin --delete` runs no
+merge check at all, unlike local `-d`. Tip equal to `headRefOid` rules it out;
+tip ahead of it is work, and `UNKNOWN` until you have read what it is.
+
 ## Only yours — and the listings will not tell you
 
 `git worktree list`, `git branch -a`, `ss -ltnp` and the PR list all show the
