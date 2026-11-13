@@ -6,9 +6,12 @@ description: >
   asked what notation or diagram a project is missing, when drawing or
   reviewing a flowchart, sequence, class, ER, dataflow, topology or C4
   diagram, when a diagram is offered as evidence of how something works, or
-  when choosing which notation to draw. A diagram read off the source
-  describes the code that exists, not the code that is reached — and it
-  renders, reviews and reads perfectly either way.
+  when choosing which notation to draw. Also when checking the counts,
+  citations or claims table a diagram document states about a codebase, and
+  when the notation's primitive — a class, say — does not exist in the
+  language being drawn. A diagram read off the source describes the code that
+  exists, not the code that is reached — and it renders, reviews and reads
+  perfectly either way.
 ---
 
 # Verifying what a diagram claims
@@ -379,3 +382,244 @@ modules. Resolve through the AST where the language has one, and treat grep
 counts as a list to read rather than a number to quote.
 
 Measured here against GNU grep 3.12, GNU sed 4.9 and Python 3.14.4.
+
+## 11. The counts in the prose are claims, and they fail by scope
+
+A wrong edge gets caught, because a reviewer who knows the code recognises a
+wrong arrow. A wrong **number** does not: nobody holds "489" in their head, and
+every reading of it is plausible.
+
+Nine counts in the first draft of one class-diagram document were wrong. Not one
+was an arithmetic slip. Each was an honest measurement of a slightly different
+question from the sentence it was sitting in.
+
+Asked of one repository at one instant — *how many Bash functions are defined
+under `scripts/`?*
+
+| probe | definition sites | files |
+|---|---|---|
+| `git grep HEAD -- 'scripts/**/*.sh'` | 458 | 54 |
+| `git grep HEAD -- 'scripts/*.sh'` | 496 | 58 |
+| `git grep HEAD -- ':(glob)scripts/**/*.sh'` | 496 | 58 |
+| `git grep HEAD -- scripts/` | 497 | 59 |
+| `grep -r scripts/ --include='*.sh'` | **502** | 58 |
+
+A 10% spread, and every row is the right answer to its own question. The four
+gaps, each measured rather than assumed:
+
+- **git pathspec wildcards cross `/` unless you ask for glob magic.**
+  `scripts/*.sh` matches `scripts/lib/app_managers.sh` — verified, it is the
+  first hit — while the narrower-*looking* `scripts/**/*.sh` is the spelling
+  that drops the four top-level scripts. Backwards from shell intuition, in the
+  direction that silently shrinks a count.
+- **`git grep <rev>` reads the commit; `grep -r` reads your working tree.** The
+  6-site gap between the last two rows is four `.sh` files carrying uncommitted
+  edits, some of them another session's. **A count taken from the filesystem of
+  a dirty checkout is a count of nobody's commit**, and the reader cannot
+  reproduce it.
+- **A directory pathspec counts your documentation.** The extra file in row 4 is
+  `scripts/REFACTORING_SUMMARY.md` — a stale design note whose prose matches the
+  function-definition regex.
+- **"across M files" is a second question you did not notice asking.** 60 `.sh`
+  files exist under `scripts/`; 58 of them define a function. Both are true, and
+  "N functions across M files" has quietly asked two things at once.
+
+So **pin the count to a revision and quote the probe beside it.** The document
+this came from survived re-measurement a day later for exactly that reason: it
+claimed 495 sites / 489 names *at commit `f442b24`*, and
+`git grep f442b24 -- ':(glob)scripts/**/*.sh'` still returns 495 and 489. At
+`HEAD` the same probe returns 496 and 490, because one function landed in
+between. An unpinned count would simply have gone wrong, with nothing to mark
+the moment it did.
+
+**Sites and names are different counts, and a dict silently picks one.** In that
+tree, four names are defined at more than one site — `normalize_apt_version` (3),
+`usage` (3), `set_alternative_if_available` (2), `verbose_enabled` (2). Ten sites,
+four keys: any probe that indexes into a dict by name loses exactly the 6 that
+separate 502 from 496. Say which of the two the sentence means.
+
+**And do not quote a fraction you did not divide.** The same draft said one key
+prefix accounted for *"roughly two thirds"* of call sites. Measured: 336 of 596,
+which is 56%. Write `336 of 596` and let the reader check the division.
+
+Measured against git 2.53.0 and GNU grep 3.12 on one repository of 60 shell
+files. The spread is a property of the probes, not of that repository; its
+magnitude is not.
+
+## 12. Render is not parse, and the harness needs stubs before it needs your diagram
+
+Section 9 closes with one sentence — *also render before committing*. **That
+sentence is not enough, and this corrects it.** The obvious way to act on it is
+`mermaid.parse()`, which is a syntax check: it answers whether the text is
+well-formed, not whether the diagram draws. A parse-only check was shipped as
+"the diagrams render" in the document this came from, and it had established no
+such thing.
+
+Rendering headlessly is a dozen lines, and all the difficulty is in the DOM, not
+in your diagram:
+
+```js
+const dom = new JSDOM('<!doctype html><html><body><div id="c"></div></body></html>',
+                      { pretendToBeVisual: true });
+for (const k of ['window','document','SVGElement','Element','HTMLElement','Node',
+                 'DOMParser','CSSStyleDeclaration','getComputedStyle'])
+  globalThis[k] = dom.window[k] ?? dom.window;
+globalThis.CSSStyleSheet = dom.window.CSSStyleSheet
+  ?? class { replaceSync(){} insertRule(){} get cssRules(){ return []; } };
+globalThis.MutationObserver = dom.window.MutationObserver
+  ?? class { observe(){} disconnect(){} };
+globalThis.requestAnimationFrame = (cb) => setTimeout(cb, 0);
+
+// jsdom has no SVG layout; mermaid's dagre pass calls these and gets undefined
+const proto = dom.window.SVGElement.prototype;
+proto.getBBox = function () {
+  const n = (this.textContent || '').length;
+  return { x: 0, y: 0, width: Math.max(10, n * 7), height: 18 };
+};
+proto.getComputedTextLength = function () { return (this.textContent || '').length * 7; };
+proto.getScreenCTM = function () {
+  return { a:1,b:0,c:0,d:1,e:0,f:0, inverse(){ return this; }, multiply(){ return this; } };
+};
+proto.createSVGMatrix = function () { return { a:1,b:0,c:0,d:1,e:0,f:0 }; };
+
+const mermaid = (await import('mermaid')).default;
+mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
+const { svg } = await mermaid.render(id, block, dom.window.document.getElementById('c'));
+```
+
+**The first run of this failed on all six blocks with `CSSStyleSheet is not
+defined`, which reads exactly like six broken diagrams and was one missing
+global.** Expect that, and diagnose the environment before touching the diagram:
+a harness that cannot render *anything* yet tells you nothing about what you
+drew.
+
+Which is why it needs both controls, and they are cheap:
+
+    a deliberately broken block   -> RENDER FAILED  Parse error on line 3
+    a trivial two-class block     -> rendered  svg=15869B
+
+Without the first, "rendered" is unfalsifiable. Also assert on the SVG, not just
+on the absence of a throw — mermaid renders a *syntax-error graph* rather than
+throwing in some cases, so test the output for `aria-roledescription="error"`,
+and grep it for the labels your prose depends on. Six blocks in that document
+produced 408 KB of SVG and each label the surrounding paragraphs cite was found
+in it.
+
+**State the limit in the document.** `getBBox` is a stub returning a guess from
+text length, so this establishes that the blocks compile to SVG carrying the
+right labels. It establishes nothing about layout, overlap or legibility in a
+real browser.
+
+Install the harness outside the repository — a scratch directory with its own
+`package.json` — so a one-off check does not land as a devDependency in a
+project that will never run it. Record the renderer version next to the diagram;
+the dialect moves. Measured with mermaid 11.17.2, jsdom 31.0.0, Node 26.13.0.
+
+## 13. A claims table can cite an instrument that was never run
+
+Section 6 gets you the table. This is the failure that lives *inside* it, and it
+is invisible to every reader: the row is well-formed, the claim is true, and the
+thing in the "Held by" column does not exist.
+
+> **Recorded.** A class-diagram document asserted that two modules have no
+> dependency on each other "as the probe in §7 confirms". Section 7 contained no
+> such probe. One had never been written — a reachability probe had, answering a
+> different question, and the citation had drifted onto it while the sentence was
+> being edited. The claim turned out to be true when a dependency probe was
+> finally built and controlled, which is the uncomfortable part: **the table had
+> been right about the code and wrong about itself**, and nothing in the document
+> could have told you.
+
+So resolve the citations mechanically, the way section 3 resolves the nodes.
+Extract every quoted test name from the document and look it up in the suites:
+
+```python
+flat = re.sub(r'\s+', ' ', open(doc).read())          # see below — do not skip this
+quoted = re.findall(r'[*`]"([^"]+)"[*`]', flat)
+names  = set(re.findall(r'^@test\s+"([^"]+)"', suite, re.M))
+```
+
+**Flatten the whitespace first, or the checker lies about why it failed.** A
+claims table wraps, so a cited name spans a line break; `[^"]+` happily captures
+the newline and the next line's indentation, the lookup then fails, and the
+failure prints only up to the break. Measured on the same document, 21 citations:
+
+    without flattening   2 unresolved
+    with flattening      0 unresolved
+
+and the two read as
+
+    FAIL  each summary carries its own
+    FAIL  a filtered run tags the summary with the
+
+Both are real test names, truncated mid-sentence by the report that was supposed
+to be checking them — so they look precisely like tests somebody renamed. Two
+hours of chasing renames that never happened is the cost of the missing `re.sub`.
+
+Running that checker on a document whose wrapping had just changed also surfaced
+two genuine defects of a kind nothing else would catch: a sentence-ending period
+sitting *inside* the quotation marks of a quoted test name, so the cited name was
+not the test's name. Cheap to fix, impossible to see.
+
+Then, per row, ask the question the table does not: **when did the cited
+instrument last run, and have you watched it fail?** A test name in that column
+is an assumption until someone has seen it go red — which is section 6's pointer
+to [`mutation-test-guards`](../mutation-test-guards/), and it applies to the
+probes you wrote for the document just as much as to the project's own suite.
+
+## 14. Drawing a class diagram of a language that has no classes
+
+Asked for a class diagram, the first probe is not "what are the classes" but
+"are there any", and it needs its control in the same breath:
+
+    bash                                0
+    web/src + web/backend  (ts/tsx/js)   0
+    quickshell             (qml)         0
+    ----
+    control: the same probe over node_modules/   717
+
+**Zero in the product and 717 in the dependencies** is a finding, not an
+obstacle: the probe works, and the notation's primitive is simply absent from
+the codebase. A Bash project has one global namespace and `source` as its only
+composition mechanism; a React and Node project written in hooks and modules has
+no more classes than the Bash does.
+
+Two bad options and one good one. Inventing classes to fill the diagram makes it
+fiction. Refusing to draw discards the extraction, which section 2 says is worth
+running whatever happens to the picture. Instead **draw the units the language
+actually has, and put the absence in the document's opening paragraph rather than
+in a caveat at the bottom** — stereotyped modules (`«module»`, `«orchestrator»`,
+`«plugin»`, `«event»`, `«config schema»`, `«react component»`), with a
+declaration-count table immediately under the title showing what the extraction
+found. A reader who disagrees with the framing then disagrees on line 20, not
+after six diagrams.
+
+The reachability probe in section 1 needs replacing too, because `ast` has no
+Bash equivalent. What worked: collect every function name defined anywhere, scan
+each function's body for occurrences of the others to build the call graph, root
+the walk at the top-level statements of the entry point, and **control it by
+injecting one call into a scratch copy** — the probe must report exactly that new
+edge and nothing else. Section 5's warning is sharper here than in a language
+with an AST: a hand-rolled graph that finds no surprise is far more likely to be
+a broken graph than a tidy codebase.
+
+## When editing this skill: verified does not license the generalisation
+
+Every correction to this file goes in the table below, with **how it got in** —
+the cause is the reusable part, not the fix.
+
+| What was wrong | How it got there |
+|---|---|
+| Section 9's *"also render before committing"*, left as one sentence, which §12 now corrects | the rule was right and too short to act on: its obvious reading is `mermaid.parse()`, which checks syntax and draws nothing, and a parse-only check shipped as "the diagrams render" |
+| *"the probe in §7 confirms there is no cross-module edge"*, in a document written with this skill open | a citation drifted onto a probe answering a different question while the sentence around it was edited; §13 is the check that catches it, and it did not exist yet |
+| *"486 of 489 names, because the probe skips a nested definition"* — drafted for §11 and cut before publishing | the mechanism could not be reproduced: the tree has no indented function definitions at all. Replaced with the dict-collapse gap, which measures exactly |
+
+Two of the three were written while this skill was loaded and being followed,
+which is the point worth keeping: **the author of a probe is the worst-placed
+person to notice the question it does not ask.** The first row is the sharpest,
+because the sentence it corrects was not false — it was true, and too compressed
+to be executed correctly.
+
+Hence, as elsewhere in this corpus: **write the rule at the scope of the test.**
+If you measured a spread across five pathspecs in one repository, write that —
+not "counts are unreliable".
