@@ -1,6 +1,6 @@
 ---
 name: session-pending
-description: Answer "is there anything pending in this session?" — a measured account of what this session still holds, so the user can decide whether to close it. Use this whenever someone asks whether a session can be dropped, closed, ended or killed, whether it is safe to stop, whether anything would be lost, or says things like "am I done here", "can I close this", "anything outstanding?", "wrapping up", "what's left". Sessions often share a checkout with other agents and with the user, so "pending" includes work others are waiting on — background monitors, promises, claimed tasks — not only uncommitted files. Where the finding is your own uncommitted work or your own unpushed commits, this skill clears it — commits and pushes — instead of handing back a command, and stops short of publishing when the push would carry another session's commits.
+description: Answer "is there anything pending in this session?" — a measured account of what this session still holds, so the user can decide whether to close it. Use this whenever someone asks whether a session can be dropped, closed, ended or killed, whether it is safe to stop, whether anything would be lost, or says things like "am I done here", "can I close this", "anything outstanding?", "wrapping up", "what's left". Sessions often share a checkout with other agents and with the user, so "pending" includes work others are waiting on — background monitors, promises, claimed tasks — not only uncommitted files. Where the finding is your own uncommitted work, your own unpushed commits or a read-only browser tab this session opened, this skill clears it — commits, pushes, closes the tab — instead of handing back a command, and stops short of publishing when the push would carry another session's commits, or of closing a tab that holds a filled form awaiting a human click.
 ---
 
 # Is there anything pending in this session?
@@ -326,8 +326,9 @@ waiting is a Mention, like a server.
 
 **7. Background tasks, monitors and session-held resources.** The largest gap:
 none of this touches disk. Background commands, monitors, scheduled work — and
-resources held through a tool rather than a port, like a browser pane, which
-`ss` cannot see because a client is not a listener.
+resources held through a tool rather than a port, which `ss` cannot see because a
+client is not a listener. **Browser tabs are the common case and have their own
+check below**, because the hazard there is closing one, not leaving it.
 
 If the harness reports orphaned tasks, that notification is a signal worth
 reading rather than dismissing — but read what it names. One such listing named
@@ -340,7 +341,49 @@ question is not "did something die" but **"did I promise its result?"** A poll
 loop that timed out with nobody waiting is noise; a monitor watching a deploy the
 user asked to be told about is a promise, and belongs below.
 
-**8. Promises.** Re-read your last several messages and ask the concrete
+**8. Browser tabs you opened.** A tab is held through a tool, not a port, and
+**neither of the process checks can see it.** The browser is the user's own
+long-lived Chrome (or the app's own pane); its working directory is not under the
+repo, and your tab is a row inside that process, not a process. Measured in a
+session that had opened one tab and driven it through a dozen reads: the `/proc`
+sweep from check 5 returned **50** lines — eight `claude` processes with their MCP
+proxies and docker containers, seven login shells, and its own `cut` — and **not
+one of them was the tab**.
+
+So ask the browser:
+
+```
+tabs_context_mcp   (Claude in Chrome)   /   tabs_context   (the built-in pane)
+```
+
+That listing is already scoped to you: tabs other sessions opened live in their
+own group. **But scoped to the group is not the same as opened by you** — a tab
+the user opened and you merely drove is theirs, and closing it is not tidying.
+
+**The hazard runs in both directions, and the expensive one is closing.** A tab
+can *be* the deliverable. A form filled but not submitted — a proposal awaiting a
+human click, a publish or payment step deliberately left to the user, anything
+behind a CAPTCHA or Turnstile an agent must not click — holds work that exists
+**only in that page's DOM**. It is not on disk, it is not in git, and it has no
+undo: a reload erases the fill, and a close destroys it. That is **blocker-grade**
+— leave the tab open, and name it by URL, because the tab title is page-authored
+and changes under you.
+
+**And "left open" is not storage either.** Measured: an agent's tab group was
+closed between two turns, the filled tab became unreachable to every tool, and
+the only surviving copy of a 2,680-character field was the session transcript —
+from which it had to be rebuilt and re-verified by arithmetic. So when you report
+a tab you are holding open on purpose, say **what it would cost to rebuild**, not
+just that it is open.
+
+**Closing takes one id, singular.** Measured, in the same session: `tabs_close_mcp`
+with `tabIds: [...]` was rejected outright — `expected number, received undefined
+at tabId` — and the same call with `tabId: <n>` closed it and reported
+`Group is now empty (auto-removed)`. Quote that line; it is the confirmation.
+Close **by id from the listing**, never by closing a window, and never sign out of
+anything.
+
+**9. Promises.** Re-read your last several messages and ask the concrete
 questions, not the general one — "did I promise anything?" is too easy to answer
 no to from memory:
 - did I say "I'll report back" / "I'll tell you when"?
@@ -356,23 +399,35 @@ no to from memory:
 | An armed monitor or background task someone relies on | **Blocks** — dies silently with the session |
 | A live process you started, waiting or part-way through | **Blocks** — no port to find it by, and it dies with the shell |
 | A promise, claim or accepted handoff | **Blocks** — nothing else will surface it |
+| A filled-but-unsubmitted page in a tab you opened | **Blocks** — the work exists only in that DOM; a reload erases it, a close destroys it, and no process check sees it |
 | An open PR you opened | Mention — awaiting the user by design, not unfinished |
 | A worktree you hold, clean and merged | Mention — costs only tidiness |
 | A server you started | Mention — give the PID and what it serves |
+| A read-only tab you opened, still open | Mention — it outlives the window in the user's browser; close it by `tabId` and say so |
 | Irreplaceable captured data in an ignored path | Mention — closing does not delete it, but nothing protects it either |
 | Uncommitted work **someone else wrote** | Mention — flag it, never commit it |
 | Behind the default branch | Ignore |
 
 ## Clearing what you found
 
-Two of the findings above are cleared here rather than handed back as a command
-to paste: **your own uncommitted work**, and **your own commits that have never
-left this disk**. In that order, because the second depends on the first.
+Three of the findings above are cleared here rather than handed back as a command
+to paste: **your own uncommitted work**, **your own commits that have never left
+this disk**, and **a read-only tab you opened**. The first two in that order,
+because the second depends on the first.
 
 Everything else in the weights table is reported and never executed. No command
 discharges a promise; stopping someone's process, removing a worktree or killing
-a server is a decision, not a cleanup. Clearing the two that *are* mechanical is
+a server is a decision, not a cleanup. Clearing the three that *are* mechanical is
 what buys the right to be strict about the rest.
+
+**The tab is the cheapest of the three and has the sharpest stop.** Close it when
+you opened it and it only ever displayed pages; report the `Group is now empty` or
+per-tab line the close returned. ⛔ **Do not close one holding a filled form, a
+pending human click, or anything you were told to leave for the user** — that is
+the blocker in the table. Closing it is irreversible for the same reason
+`--force` is: there is nothing left anywhere to recover it from. If you cannot tell which kind it is, leave it open and name the
+URL: an orphan tab costs the user a click, and a destroyed draft costs them the
+work.
 
 **Do not improvise the commit.** `commit-in-shared-checkout` is the procedure and
 this is the place it is for — measure that it is installed, as check 1 says, and
@@ -473,6 +528,7 @@ SAFE TO DROP.
 
   holding    .claude/worktrees/parser — clean, merged, removable
   server     pid 2094463 on :3001, serving your worktree — yours to stop
+  tab        closed the one tab I opened; "Group is now empty (auto-removed)"
   not yours  ?? src/core/cache.ts in root — another session's; left alone
 ```
 
@@ -490,6 +546,9 @@ SAFE TO DROP — committed and pushed.
 NOT YET — two commits exist only on this disk, and a monitor is armed.
 
   no upstream  fix-parser: 97445f3, 3221126 have never been pushed
+  tab open     workana.com/messages/bid/...-299 — form filled, awaiting your
+               click; a reload erases it, so I left it. Rebuilding costs a
+               re-read of the transcript and the 2,680-character field
   monitor      watching the deploy pipeline; the user expects it to report
   promised     told the indexer session you would re-run the two failing cases
 
